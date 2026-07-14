@@ -1,3 +1,4 @@
 .build/
 build/
+.tools/
 .DS_Store
