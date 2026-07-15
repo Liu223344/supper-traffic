@@ -14,6 +14,23 @@ import Testing
 }
 
 @MainActor
+@Test func anchorPanelMovesAllTrafficLightChildrenTogether() {
+    let anchor = OverlayAnchorPanel()
+    let close = OverlayPanel(action: .close)
+    let minimize = OverlayPanel(action: .minimize)
+    anchor.setFrameOrigin(NSPoint(x: 10, y: 10))
+    anchor.addChildWindow(close, ordered: .above)
+    anchor.addChildWindow(minimize, ordered: .above)
+    close.setFrame(NSRect(x: 100, y: 100, width: 24, height: 24), display: false)
+    minimize.setFrame(NSRect(x: 132, y: 100, width: 24, height: 24), display: false)
+
+    anchor.setFrameOrigin(NSPoint(x: 30, y: 45))
+
+    #expect(close.frame.origin == NSPoint(x: 120, y: 135))
+    #expect(minimize.frame.origin == NSPoint(x: 152, y: 135))
+}
+
+@MainActor
 @Test func minimizedOverlayStaysSuppressedUntilRestored() {
     let pid = ProcessInfo.processInfo.processIdentifier
     let key = AXWindowKey(pid: pid, element: AXUIElementCreateApplication(pid))

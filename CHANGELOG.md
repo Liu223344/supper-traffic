@@ -14,6 +14,7 @@
 - Reduced idle WindowServer sampling to 10 Hz while using a 240 Hz boost during moves and resizes.
 - Paused periodic accessibility rescans during active tracking and stopped redrawing unchanged panel contents on position-only updates.
 - Enabled a short-lived latency-critical process activity during moves and removed a duplicate WindowServer query from resize handling.
+- Attached each traffic-light group to a transparent AppKit anchor window so all three panels move in one WindowServer operation.
 
 ## 1.0.0 - 2026-07-14
 
