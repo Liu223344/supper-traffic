@@ -9,6 +9,8 @@
 - Rechecked window occlusion on every position sample so background overlays cannot remain above a quickly moved foreground window.
 - Reconciled hover state against the live pointer position so a dragged panel cannot remain colored after moving away from the pointer.
 - Applied occlusion per button so a foreground window hides only the traffic lights it actually covers.
+- Added persistent per-button actions, including quitting or hiding the target application.
+- Hid overlays before minimization begins and restored them only after the window leaves the Dock.
 
 ## 1.0.0 - 2026-07-14
 

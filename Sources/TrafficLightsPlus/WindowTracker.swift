@@ -159,6 +159,16 @@ final class WindowTracker {
         case kAXUIElementDestroyedNotification:
             removeOverlay(for: key)
             refreshVisibility()
+        case kAXWindowMiniaturizedNotification:
+            overlays[key]?.suppressUntilRestored()
+        case kAXWindowDeminiaturizedNotification:
+            if let overlay = overlays[key] {
+                overlay.restoreFromSuppression()
+                _ = overlay.update(preferences: preferences, recalibrateNativeCenters: true)
+                refreshVisibility()
+            } else {
+                scheduleRefresh()
+            }
         default:
             scheduleRefresh()
         }

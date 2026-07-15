@@ -55,13 +55,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if settingsWindow == nil {
             let controller = NSHostingController(rootView: SettingsView(preferences: preferences))
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 480, height: 520),
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 680),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
             window.contentViewController = controller
-            window.setContentSize(NSSize(width: 480, height: 520))
+            window.setContentSize(NSSize(width: 480, height: 680))
             window.title = "Traffic Lights+ 设置"
             window.isReleasedWhenClosed = false
             window.tabbingMode = .disallowed

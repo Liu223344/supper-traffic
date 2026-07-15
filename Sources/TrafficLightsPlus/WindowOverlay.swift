@@ -30,6 +30,9 @@ final class WindowOverlay {
     private var preparedCGFrames: [WindowAction: CGRect] = [:]
     private var preparedActions = Set<WindowAction>()
     private var visibleActions = Set<WindowAction>()
+    private var configuredBehaviors: [WindowAction: ButtonBehavior] = [:]
+    private(set) var isSuppressed = false
+    private var isEligibleForDisplay = true
     private var lastDiagnostic = ""
     private var hoverResetWorkItem: DispatchWorkItem?
 
@@ -46,16 +49,24 @@ final class WindowOverlay {
     @discardableResult
     func update(preferences: Preferences, recalibrateNativeCenters: Bool = true) -> Bool {
         guard let frame = axFrame(of: window), frame.width > 100, frame.height > 60 else {
+            isEligibleForDisplay = false
             hide()
             return false
         }
 
         let minimized: Bool = copyAttribute(kAXMinimizedAttribute as CFString, from: window) ?? false
+        if minimized {
+            suppressUntilRestored()
+            return false
+        }
         let fullScreen: Bool = copyAttribute("AXFullScreen" as CFString, from: window) ?? false
-        guard !minimized, preferences.showInFullScreen || !fullScreen else {
+        guard preferences.showInFullScreen || !fullScreen else {
+            isEligibleForDisplay = false
             hide()
             return false
         }
+
+        isEligibleForDisplay = true
 
         windowFrame = frame
         title = copyAttribute(kAXTitleAttribute as CFString, from: window) ?? ""
@@ -63,6 +74,9 @@ final class WindowOverlay {
         let windowIsFocused: Bool = copyAttribute(kAXFocusedAttribute as CFString, from: window) ?? false
         let windowIsMain: Bool = copyAttribute(kAXMainAttribute as CFString, from: window) ?? false
         let isActiveWindow = appIsActive && (windowIsFocused || windowIsMain)
+        configuredBehaviors = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map {
+            ($0, preferences.behavior(for: $0))
+        })
         let controlSize = ControlLayout.effectiveSize(preferred: preferences.size)
         var buttons: [WindowAction: AXUIElement] = [:]
         var frames: [WindowAction: CGRect] = [:]
@@ -118,10 +132,11 @@ final class WindowOverlay {
                 continue
             }
 
-            let isEnabled: Bool = copyAttribute(kAXEnabledAttribute as CFString, from: buttons[action]!) ?? true
+            let behavior = configuredBehaviors[action] ?? ButtonBehavior.defaultBehavior(for: action)
             panel.overlayView.style = preferences.style
             panel.overlayView.controlSize = controlSize
-            panel.overlayView.isControlEnabled = isEnabled
+            panel.overlayView.behavior = behavior
+            panel.overlayView.isControlEnabled = isBehaviorEnabled(behavior, buttons: buttons)
             panel.overlayView.isWindowActive = isActiveWindow
             let newFrame = NSRect(origin: origin, size: cgFrame.size)
             if panel.frame != newFrame { panel.setFrame(newFrame, display: true) }
@@ -166,7 +181,9 @@ final class WindowOverlay {
     }
 
     func setVisibleActions(_ actions: Set<WindowAction>) {
-        let nextActions = actions.intersection(preparedActions)
+        let nextActions = isSuppressed || !isEligibleForDisplay
+            ? []
+            : actions.intersection(preparedActions)
         guard nextActions != visibleActions else { return }
         visibleActions = nextActions
 
@@ -203,6 +220,17 @@ final class WindowOverlay {
         hidePanels()
     }
 
+    func suppressUntilRestored() {
+        isSuppressed = true
+        isEligibleForDisplay = false
+        hide()
+    }
+
+    func restoreFromSuppression() {
+        isSuppressed = false
+        isEligibleForDisplay = true
+    }
+
     private func hidePanels() {
         hoverResetWorkItem?.cancel()
         hoverResetWorkItem = nil
@@ -231,8 +259,50 @@ final class WindowOverlay {
     }
 
     private func perform(_ action: WindowAction) {
-        guard let button = targetButtons[action] else { return }
-        if AXUIElementPerformAction(button, kAXPressAction as CFString) != .success { NSSound.beep() }
+        let behavior = configuredBehaviors[action] ?? ButtonBehavior.defaultBehavior(for: action)
+
+        if let nativeAction = behavior.nativeWindowAction {
+            guard let button = targetButtons[nativeAction] else { NSSound.beep(); return }
+            if behavior == .minimizeWindow { suppressUntilRestored() }
+            if AXUIElementPerformAction(button, kAXPressAction as CFString) != .success {
+                if behavior == .minimizeWindow { restoreFromSuppression() }
+                NSSound.beep()
+            }
+            return
+        }
+
+        guard let application = NSRunningApplication(processIdentifier: key.pid) else {
+            NSSound.beep()
+            return
+        }
+        switch behavior {
+        case .quitApplication:
+            if !application.terminate() { NSSound.beep() }
+        case .hideApplication:
+            if !application.hide() { NSSound.beep() }
+        case .doNothing:
+            break
+        case .closeWindow, .minimizeWindow, .zoomWindow:
+            break
+        }
+    }
+
+    private func isBehaviorEnabled(
+        _ behavior: ButtonBehavior,
+        buttons: [WindowAction: AXUIElement]
+    ) -> Bool {
+        if let nativeAction = behavior.nativeWindowAction {
+            guard let button = buttons[nativeAction] else { return false }
+            return copyAttribute(kAXEnabledAttribute as CFString, from: button) ?? true
+        }
+        switch behavior {
+        case .quitApplication, .hideApplication:
+            return NSRunningApplication(processIdentifier: key.pid) != nil
+        case .doNothing:
+            return false
+        case .closeWindow, .minimizeWindow, .zoomWindow:
+            return false
+        }
     }
 
     private func attribute(for action: WindowAction) -> CFString {

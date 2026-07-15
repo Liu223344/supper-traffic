@@ -68,11 +68,26 @@ struct SettingsView: View {
         let size = CGFloat(preferences.size)
         let spacing: CGFloat = preferences.style == .macOS ? 8 : 0
         return HStack(spacing: spacing) {
-            PreviewControl(action: .close, style: preferences.style, size: size)
+            PreviewControl(
+                action: .close,
+                behavior: preferences.closeBehavior,
+                style: preferences.style,
+                size: size
+            )
                 .frame(width: size, height: size)
-            PreviewControl(action: .minimize, style: preferences.style, size: size)
+            PreviewControl(
+                action: .minimize,
+                behavior: preferences.minimizeBehavior,
+                style: preferences.style,
+                size: size
+            )
                 .frame(width: size, height: size)
-            PreviewControl(action: .zoom, style: preferences.style, size: size)
+            PreviewControl(
+                action: .zoom,
+                behavior: preferences.zoomBehavior,
+                style: preferences.style,
+                size: size
+            )
                 .frame(width: size, height: size)
         }
     }
@@ -116,6 +131,52 @@ struct SettingsView: View {
             }
 
             Toggle("在全屏窗口中显示", isOn: $preferences.showInFullScreen)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("按钮功能")
+                        .font(.headline)
+                    Spacer()
+                    Button("恢复默认") { preferences.resetButtonBehaviors() }
+                        .buttonStyle(.link)
+                }
+                behaviorRow(
+                    title: "红色按钮",
+                    color: Color(red: 1.0, green: 0.37255, blue: 0.34118),
+                    selection: $preferences.closeBehavior
+                )
+                behaviorRow(
+                    title: "黄色按钮",
+                    color: Color(red: 0.99608, green: 0.73725, blue: 0.18039),
+                    selection: $preferences.minimizeBehavior
+                )
+                behaviorRow(
+                    title: "绿色按钮",
+                    color: Color(red: 0.15686, green: 0.78431, blue: 0.25098),
+                    selection: $preferences.zoomBehavior
+                )
+            }
+        }
+    }
+
+    private func behaviorRow(
+        title: String,
+        color: Color,
+        selection: Binding<ButtonBehavior>
+    ) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(color)
+                .frame(width: 12, height: 12)
+            Text(title)
+            Spacer()
+            Picker(title, selection: selection) {
+                ForEach(ButtonBehavior.allCases) { behavior in
+                    Text(behavior.title).tag(behavior)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 190)
         }
     }
 
@@ -151,6 +212,7 @@ struct SettingsView: View {
 
 private struct PreviewControl: NSViewRepresentable {
     let action: WindowAction
+    let behavior: ButtonBehavior
     let style: ControlStyle
     let size: CGFloat
 
@@ -161,6 +223,8 @@ private struct PreviewControl: NSViewRepresentable {
     func updateNSView(_ view: OverlayButtonView, context: Context) {
         view.style = style
         view.controlSize = size
+        view.behavior = behavior
+        view.isWindowActive = true
         view.needsDisplay = true
     }
 }

@@ -8,6 +8,13 @@ enum WindowAction: Int, CaseIterable {
 
 final class OverlayButtonView: NSView {
     let action: WindowAction
+    var behavior: ButtonBehavior {
+        didSet {
+            toolTip = behavior.title
+            setAccessibilityLabel(behavior.accessibilityLabel)
+            needsDisplay = true
+        }
+    }
     var style: ControlStyle = .macOS { didSet { needsDisplay = true } }
     var controlSize: CGFloat = 28 { didSet { needsDisplay = true } }
     var isControlEnabled = true { didSet { needsDisplay = true } }
@@ -39,10 +46,11 @@ final class OverlayButtonView: NSView {
 
     init(action: WindowAction) {
         self.action = action
+        behavior = ButtonBehavior.defaultBehavior(for: action)
         super.init(frame: .zero)
-        toolTip = action.accessibilityLabel
+        toolTip = behavior.title
         setAccessibilityRole(.button)
-        setAccessibilityLabel(action.accessibilityLabel)
+        setAccessibilityLabel(behavior.accessibilityLabel)
     }
 
     @available(*, unavailable)
@@ -177,18 +185,20 @@ final class OverlayButtonView: NSView {
 
         NSColor.labelColor.withAlphaComponent(isControlEnabled ? 0.82 : 0.36).setStroke()
 
-        switch action {
-        case .close:
+        switch behavior {
+        case .closeWindow, .quitApplication:
             path.move(to: NSPoint(x: symbolRect.minX, y: symbolRect.minY))
             path.line(to: NSPoint(x: symbolRect.maxX, y: symbolRect.maxY))
             path.move(to: NSPoint(x: symbolRect.maxX, y: symbolRect.minY))
             path.line(to: NSPoint(x: symbolRect.minX, y: symbolRect.maxY))
-        case .minimize:
+        case .minimizeWindow, .hideApplication:
             path.move(to: NSPoint(x: symbolRect.minX, y: symbolRect.midY))
             path.line(to: NSPoint(x: symbolRect.maxX, y: symbolRect.midY))
-        case .zoom:
+        case .zoomWindow:
             path.move(to: NSPoint(x: symbolRect.minX, y: symbolRect.maxY))
             path.line(to: NSPoint(x: symbolRect.maxX, y: symbolRect.minY))
+        case .doNothing:
+            return
         }
         path.stroke()
     }
@@ -217,15 +227,5 @@ final class OverlayPanel: NSPanel {
         becomesKeyOnlyIfNeeded = true
         isReleasedWhenClosed = false
         animationBehavior = .none
-    }
-}
-
-private extension WindowAction {
-    var accessibilityLabel: String {
-        switch self {
-        case .close: return "关闭窗口"
-        case .minimize: return "最小化窗口"
-        case .zoom: return "缩放窗口"
-        }
     }
 }

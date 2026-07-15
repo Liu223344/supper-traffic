@@ -16,6 +16,9 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(preferences.size == 28)
         #expect(preferences.style == .macOS)
         #expect(!preferences.showInFullScreen)
+        #expect(preferences.closeBehavior == .closeWindow)
+        #expect(preferences.minimizeBehavior == .minimizeWindow)
+        #expect(preferences.zoomBehavior == .zoomWindow)
     }
 }
 
@@ -26,13 +29,39 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         preferences.size = 42
         preferences.style = .edgeSquares
         preferences.showInFullScreen = true
+        preferences.closeBehavior = .quitApplication
+        preferences.minimizeBehavior = .hideApplication
+        preferences.zoomBehavior = .doNothing
 
         let restored = Preferences(defaults: defaults)
         #expect(!restored.enabled)
         #expect(restored.size == 42)
         #expect(restored.style == .edgeSquares)
         #expect(restored.showInFullScreen)
+        #expect(restored.closeBehavior == .quitApplication)
+        #expect(restored.minimizeBehavior == .hideApplication)
+        #expect(restored.zoomBehavior == .doNothing)
     }
+}
+
+@Test func corruptStoredBehaviorsFallBackToNativeDefaults() {
+    withDefaults { defaults in
+        defaults.set("unknown", forKey: "closeButtonBehavior")
+        defaults.set("unknown", forKey: "minimizeButtonBehavior")
+        defaults.set("unknown", forKey: "zoomButtonBehavior")
+
+        let preferences = Preferences(defaults: defaults)
+        #expect(preferences.closeBehavior == .closeWindow)
+        #expect(preferences.minimizeBehavior == .minimizeWindow)
+        #expect(preferences.zoomBehavior == .zoomWindow)
+    }
+}
+
+@Test func buttonBehaviorNativeActionMappingIsStable() {
+    #expect(ButtonBehavior.closeWindow.nativeWindowAction == .close)
+    #expect(ButtonBehavior.minimizeWindow.nativeWindowAction == .minimize)
+    #expect(ButtonBehavior.zoomWindow.nativeWindowAction == .zoom)
+    #expect(ButtonBehavior.quitApplication.nativeWindowAction == nil)
 }
 
 @Test func corruptStoredSizeIsClamped() {
