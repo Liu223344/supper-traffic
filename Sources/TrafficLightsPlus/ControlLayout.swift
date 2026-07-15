@@ -7,6 +7,15 @@ struct ControlLayout {
         CGFloat(min(max(preferred, sizeRange.lowerBound), sizeRange.upperBound))
     }
 
+    static func frameCentered(on nativeFrame: CGRect, controlSize: CGFloat) -> CGRect {
+        CGRect(
+            x: nativeFrame.midX - controlSize / 2,
+            y: nativeFrame.midY - controlSize / 2,
+            width: controlSize,
+            height: controlSize
+        )
+    }
+
     static func frames(
         style: ControlStyle,
         controlSize: CGFloat,

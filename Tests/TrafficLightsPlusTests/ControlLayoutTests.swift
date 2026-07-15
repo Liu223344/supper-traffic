@@ -8,6 +8,15 @@ import Testing
     #expect(ControlLayout.effectiveSize(preferred: 100) == 48)
 }
 
+@Test func circleFrameUsesNativeButtonCenter() {
+    let native = CGRect(x: 20, y: 12, width: 14, height: 14)
+    let enlarged = ControlLayout.frameCentered(on: native, controlSize: 28)
+
+    #expect(enlarged == CGRect(x: 13, y: 5, width: 28, height: 28))
+    #expect(enlarged.midX == native.midX)
+    #expect(enlarged.midY == native.midY)
+}
+
 @Test func macOSFramesHaveDraggableGaps() throws {
     let frames = ControlLayout.frames(
         style: .macOS,

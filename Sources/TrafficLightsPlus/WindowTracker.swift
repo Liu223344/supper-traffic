@@ -3,157 +3,314 @@ import ApplicationServices
 import Combine
 import OSLog
 
+private func accessibilityObserverCallback(
+    _ observer: AXObserver,
+    _ element: AXUIElement,
+    _ notification: CFString,
+    _ refcon: UnsafeMutableRawPointer?
+) {
+    guard let refcon else { return }
+    let tracker = Unmanaged<WindowTracker>.fromOpaque(refcon).takeUnretainedValue()
+    if Thread.isMainThread {
+        tracker.handleAccessibilityNotification(element: element, notification: notification as String)
+    } else {
+        DispatchQueue.main.async {
+            tracker.handleAccessibilityNotification(element: element, notification: notification as String)
+        }
+    }
+}
+
+private final class ObservedApplication {
+    let pid: pid_t
+    let element: AXUIElement
+    let observer: AXObserver
+    var windowKeys = Set<AXWindowKey>()
+
+    init(pid: pid_t, element: AXUIElement, observer: AXObserver) {
+        self.pid = pid
+        self.element = element
+        self.observer = observer
+    }
+
+    deinit {
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+    }
+}
+
+private struct CGWindowRecord {
+    let id: CGWindowID
+    let pid: pid_t
+    let bounds: CGRect
+    let title: String
+}
+
 final class WindowTracker {
     private let preferences: Preferences
-    private let panels: [WindowAction: OverlayPanel]
     private let logger = Logger(subsystem: "app.trafficlightsplus.mac", category: "window-tracker")
+    private var overlays: [AXWindowKey: WindowOverlay] = [:]
+    private var applications: [pid_t: ObservedApplication] = [:]
     private var timer: Timer?
+    private var positionTimer: Timer?
     private var subscriptions = Set<AnyCancellable>()
-    private var targetButtons: [WindowAction: AXUIElement] = [:]
-    private var lastExternalWindow: AXUIElement?
-    private var lastDiagnostic = ""
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var refreshScheduled = false
+    private var lastScanSummary = ""
 
     init(preferences: Preferences) {
         self.preferences = preferences
-        panels = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { ($0, OverlayPanel(action: $0)) })
-
-        for panel in panels.values {
-            panel.overlayView.actionHandler = { [weak self] action in self?.perform(action) }
-        }
-
         preferences.objectWillChange
-            .sink { [weak self] _ in DispatchQueue.main.async { self?.refresh() } }
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.refreshAll() } }
             .store(in: &subscriptions)
 
-        timer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { [weak self] _ in self?.refresh() }
-        refresh()
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [
+            NSWorkspace.didLaunchApplicationNotification,
+            NSWorkspace.didTerminateApplicationNotification,
+            NSWorkspace.didActivateApplicationNotification
+        ] {
+            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.scheduleRefresh()
+            })
+        }
+
+        timer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { [weak self] _ in self?.refreshAll() }
+        // Apple Silicon can comfortably sample WindowServer at high-refresh rates,
+        // which keeps a separate overlay visually attached during a drag.
+        positionTimer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+            self?.syncWindowPositions()
+        }
+        RunLoop.main.add(positionTimer!, forMode: .common)
+        refreshAll()
     }
 
-    deinit { timer?.invalidate() }
+    deinit {
+        timer?.invalidate()
+        positionTimer?.invalidate()
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceObservers.forEach(center.removeObserver)
+    }
 
-    func refresh() {
-        guard preferences.enabled else { report("disabled"); hideAll(); return }
-        guard AXIsProcessTrusted() else { report("accessibility permission unavailable"); hideAll(); return }
-        guard let app = NSWorkspace.shared.frontmostApplication else { report("frontmost application unavailable"); hideAll(); return }
-        let window: AXUIElement
-        if app.processIdentifier == ProcessInfo.processInfo.processIdentifier {
-            guard let cachedWindow = lastExternalWindow else { report("settings active without a previous target"); hideAll(); return }
-            window = cachedWindow
-        } else {
-            let appElement = AXUIElementCreateApplication(app.processIdentifier)
-            guard let focusedWindow: AXUIElement = copyAttribute(kAXFocusedWindowAttribute as CFString, from: appElement) else {
-                report("focused window unavailable for \(app.localizedName ?? "unknown")")
-                hideAll()
-                return
+    func refreshAll() {
+        refreshScheduled = false
+        guard preferences.enabled, AXIsProcessTrusted() else {
+            reportScan("disabled or accessibility permission unavailable")
+            overlays.values.forEach { $0.hide() }
+            return
+        }
+
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let runningApps = NSWorkspace.shared.runningApplications.filter {
+            !$0.isTerminated && $0.processIdentifier != ownPID && $0.activationPolicy == .regular
+        }
+        let activePIDs = Set(runningApps.map(\.processIdentifier))
+        var seenWindows = Set<AXWindowKey>()
+
+        for app in runningApps {
+            let pid = app.processIdentifier
+            let appElement = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(appElement, 1.0)
+            ensureObservedApplication(pid: pid, element: appElement)
+            guard let windows: [AXUIElement] = copyAttribute(kAXWindowsAttribute as CFString, from: appElement) else { continue }
+
+            for window in windows {
+                let key = AXWindowKey(pid: pid, element: window)
+                seenWindows.insert(key)
+                if overlays[key] == nil {
+                    overlays[key] = WindowOverlay(key: key)
+                    registerWindowNotifications(for: key)
+                }
+                if overlays[key]?.update(preferences: preferences) != true {
+                    overlays[key]?.hide()
+                }
             }
-            window = focusedWindow
-            lastExternalWindow = focusedWindow
         }
 
-        guard
-              let position: AXValue = copyAttribute(kAXPositionAttribute as CFString, from: window),
-              let size: AXValue = copyAttribute(kAXSizeAttribute as CFString, from: window) else {
-            report("window position or size unavailable")
-            hideAll()
-            return
+        let staleKeys = overlays.keys.filter { !seenWindows.contains($0) }
+        for key in staleKeys {
+            removeOverlay(for: key)
         }
-
-        if !preferences.showInFullScreen,
-           let isFullScreen: Bool = copyAttribute("AXFullScreen" as CFString, from: window),
-           isFullScreen {
-            report("full-screen target hidden by preference")
-            hideAll()
-            return
+        let stalePIDs = applications.keys.filter { !activePIDs.contains($0) }
+        for pid in stalePIDs {
+            applications.removeValue(forKey: pid)
         }
+        let appNames = runningApps.compactMap(\.localizedName).sorted().joined(separator: ",")
+        reportScan("apps=[\(appNames)] windows=\(seenWindows.count) overlays=\(overlays.count)")
+        refreshVisibility()
+    }
 
-        var cgPosition = CGPoint.zero
-        var cgSize = CGSize.zero
-        guard AXValueGetValue(position, .cgPoint, &cgPosition),
-              AXValueGetValue(size, .cgSize, &cgSize),
-              cgSize.width > 100,
-              cgSize.height > 60 else {
-            report("invalid target window geometry")
-            hideAll()
-            return
+    fileprivate func handleAccessibilityNotification(element: AXUIElement, notification: String) {
+        var pid: pid_t = 0
+        AXUIElementGetPid(element, &pid)
+        let key = AXWindowKey(pid: pid, element: element)
+
+        switch notification {
+        case kAXMovedNotification:
+            // AX window geometry trails the compositor during an interactive drag.
+            // Pull the current WindowServer frame instead of applying a stale AX frame.
+            syncWindowPositions()
+        case kAXResizedNotification:
+            if let overlay = overlays[key] {
+                _ = overlay.update(preferences: preferences, recalibrateNativeCenters: true)
+                syncWindowPositions()
+                refreshVisibility()
+            } else {
+                scheduleRefresh()
+            }
+        case kAXUIElementDestroyedNotification:
+            removeOverlay(for: key)
+            refreshVisibility()
+        default:
+            scheduleRefresh()
         }
+    }
 
-        let controlSize = ControlLayout.effectiveSize(preferred: preferences.size)
-        let frames = ControlLayout.frames(
-            style: preferences.style,
-            controlSize: controlSize,
-            windowOrigin: cgPosition,
-            windowSize: cgSize
-        )
+    private func ensureObservedApplication(pid: pid_t, element: AXUIElement) {
+        guard applications[pid] == nil else { return }
+        var observerRef: AXObserver?
+        guard AXObserverCreate(pid, accessibilityObserverCallback, &observerRef) == .success,
+              let observer = observerRef else { return }
 
-        targetButtons.removeAll(keepingCapacity: true)
-        var visibleActions: [String] = []
-        for action in WindowAction.allCases {
-            guard let panel = panels[action], let cgFrame = frames[action] else { continue }
-            guard let button: AXUIElement = copyAttribute(attribute(for: action), from: window) else {
-                panel.orderOut(nil)
+        let app = ObservedApplication(pid: pid, element: element, observer: observer)
+        applications[pid] = app
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        for notification in [
+            kAXWindowCreatedNotification,
+            kAXFocusedWindowChangedNotification,
+            kAXApplicationActivatedNotification
+        ] {
+            _ = AXObserverAddNotification(observer, element, notification as CFString, context)
+        }
+    }
+
+    private func registerWindowNotifications(for key: AXWindowKey) {
+        guard let app = applications[key.pid] else { return }
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        for notification in [
+            kAXMovedNotification,
+            kAXResizedNotification,
+            kAXUIElementDestroyedNotification,
+            kAXWindowMiniaturizedNotification,
+            kAXWindowDeminiaturizedNotification
+        ] {
+            _ = AXObserverAddNotification(app.observer, key.element, notification as CFString, context)
+        }
+        app.windowKeys.insert(key)
+    }
+
+    private func removeOverlay(for key: AXWindowKey) {
+        overlays.removeValue(forKey: key)?.hide()
+        guard let app = applications[key.pid] else { return }
+        for notification in [
+            kAXMovedNotification,
+            kAXResizedNotification,
+            kAXUIElementDestroyedNotification,
+            kAXWindowMiniaturizedNotification,
+            kAXWindowDeminiaturizedNotification
+        ] {
+            _ = AXObserverRemoveNotification(app.observer, key.element, notification as CFString)
+        }
+        app.windowKeys.remove(key)
+    }
+
+    private func refreshVisibility() {
+        let records = cgWindowRecords()
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        var shown = 0
+
+        for overlay in overlays.values {
+            guard let targetIndex = matchingRecordIndex(for: overlay, in: records) else {
+                // AX and WindowServer can report a move in different frames for one run-loop turn.
+                // Keep the previous frame visible instead of flashing it out during the drag.
                 continue
             }
+            overlay.bind(to: records[targetIndex].id)
+            overlay.syncPosition(to: records[targetIndex].bounds)
+            let covered = records[..<targetIndex].contains { record in
+                record.pid != ownPID && record.bounds.intersects(overlay.controlBounds)
+            }
+            overlay.setVisible(!covered)
+            if !covered { shown += 1 }
+        }
+        logger.debug("Visible overlays: \(shown, privacy: .public) / \(self.overlays.count, privacy: .public)")
+    }
 
-            targetButtons[action] = button
-            visibleActions.append(String(describing: action))
-            let isEnabled: Bool = copyAttribute(kAXEnabledAttribute as CFString, from: button) ?? true
-            guard let origin = appKitOrigin(forCGPoint: cgFrame.origin, size: cgFrame.size) else {
-                panel.orderOut(nil)
+    private func syncWindowPositions() {
+        guard preferences.enabled, AXIsProcessTrusted(), !overlays.isEmpty else { return }
+        let records = cgWindowRecords()
+        let recordsByID = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+
+        for overlay in overlays.values {
+            if let windowID = overlay.cgWindowID, let record = recordsByID[windowID] {
+                overlay.syncPosition(to: record.bounds)
                 continue
             }
-
-            panel.overlayView.style = preferences.style
-            panel.overlayView.controlSize = controlSize
-            panel.overlayView.isControlEnabled = isEnabled
-            let newFrame = NSRect(origin: origin, size: cgFrame.size)
-            if panel.frame != newFrame { panel.setFrame(newFrame, display: true) }
-            if !panel.isVisible { panel.orderFrontRegardless() }
+            guard let index = matchingRecordIndex(for: overlay, in: records) else { continue }
+            let record = records[index]
+            overlay.bind(to: record.id)
+            overlay.syncPosition(to: record.bounds)
         }
-        let closeFrame = frames[.close].map(NSStringFromRect) ?? "missing"
-        report("showing \(visibleActions.joined(separator: ",")) for \(app.localizedName ?? "cached window"); window=\(NSStringFromRect(CGRect(origin: cgPosition, size: cgSize))); close=\(closeFrame)")
     }
 
-    private func perform(_ action: WindowAction) {
-        guard let button = targetButtons[action] else { return }
-        if AXUIElementPerformAction(button, kAXPressAction as CFString) != .success { NSSound.beep() }
-    }
-
-    private func hideAll() {
-        targetButtons.removeAll(keepingCapacity: true)
-        for panel in panels.values where panel.isVisible { panel.orderOut(nil) }
-    }
-
-    private func report(_ diagnostic: String) {
-        guard diagnostic != lastDiagnostic else { return }
-        lastDiagnostic = diagnostic
-        logger.notice("\(diagnostic, privacy: .public)")
-    }
-
-    private func attribute(for action: WindowAction) -> CFString {
-        switch action {
-        case .close: return kAXCloseButtonAttribute as CFString
-        case .minimize: return kAXMinimizeButtonAttribute as CFString
-        case .zoom: return kAXZoomButtonAttribute as CFString
+    private func matchingRecordIndex(for overlay: WindowOverlay, in records: [CGWindowRecord]) -> Int? {
+        if let windowID = overlay.cgWindowID,
+           let boundIndex = records.firstIndex(where: { $0.id == windowID && $0.pid == overlay.key.pid }) {
+            return boundIndex
         }
+        let candidates = records.enumerated().filter { $0.element.pid == overlay.key.pid }
+        return candidates.min { lhs, rhs in
+            matchScore(record: lhs.element, overlay: overlay) < matchScore(record: rhs.element, overlay: overlay)
+        }.flatMap { matchScore(record: $0.element, overlay: overlay) < 24 ? $0.offset : nil }
+    }
+
+    private func matchScore(record: CGWindowRecord, overlay: WindowOverlay) -> CGFloat {
+        let frame = overlay.windowFrame
+        var score = abs(record.bounds.minX - frame.minX)
+            + abs(record.bounds.minY - frame.minY)
+            + abs(record.bounds.width - frame.width)
+            + abs(record.bounds.height - frame.height)
+        if !overlay.title.isEmpty, !record.title.isEmpty, overlay.title != record.title { score += 100 }
+        return score
+    }
+
+    private func cgWindowRecords() -> [CGWindowRecord] {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]] else { return [] }
+        return list.compactMap { info in
+            guard (info[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+                  let id = (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                  let pid = (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+                  let dictionary = info[kCGWindowBounds as String] as? [String: NSNumber],
+                  let x = dictionary["X"]?.doubleValue,
+                  let y = dictionary["Y"]?.doubleValue,
+                  let width = dictionary["Width"]?.doubleValue,
+                  let height = dictionary["Height"]?.doubleValue,
+                  case let bounds = CGRect(x: x, y: y, width: width, height: height),
+                  bounds.width > 40, bounds.height > 40 else { return nil }
+            return CGWindowRecord(
+                id: id,
+                pid: pid,
+                bounds: bounds,
+                title: info[kCGWindowName as String] as? String ?? ""
+            )
+        }
+    }
+
+    private func scheduleRefresh() {
+        guard !refreshScheduled else { return }
+        refreshScheduled = true
+        DispatchQueue.main.async { [weak self] in self?.refreshAll() }
+    }
+
+    private func reportScan(_ summary: String) {
+        guard summary != lastScanSummary else { return }
+        lastScanSummary = summary
+        logger.notice("\(summary, privacy: .public)")
     }
 
     private func copyAttribute<T>(_ attribute: CFString, from element: AXUIElement) -> T? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
         return value as? T
-    }
-
-    private func appKitOrigin(forCGPoint point: CGPoint, size: CGSize) -> CGPoint? {
-        for screen in NSScreen.screens {
-            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { continue }
-            let cgBounds = CGDisplayBounds(CGDirectDisplayID(number.uint32Value))
-            if cgBounds.contains(point) {
-                return CGPoint(
-                    x: screen.frame.minX + point.x - cgBounds.minX,
-                    y: screen.frame.maxY - (point.y - cgBounds.minY) - size.height
-                )
-            }
-        }
-        return nil
     }
 }
