@@ -55,6 +55,7 @@ final class WindowTracker {
     private var workspaceObservers: [NSObjectProtocol] = []
     private var refreshScheduled = false
     private var lastScanSummary = ""
+    private var trackingCadence = TrackingCadence()
 
     init(preferences: Preferences) {
         self.preferences = preferences
@@ -147,11 +148,13 @@ final class WindowTracker {
         case kAXMovedNotification:
             // AX window geometry trails the compositor during an interactive drag.
             // Pull the current WindowServer frame instead of applying a stale AX frame.
-            syncWindowPositions()
+            trackingCadence.boost(now: ProcessInfo.processInfo.systemUptime)
+            syncWindowPositions(force: true)
         case kAXResizedNotification:
+            trackingCadence.boost(now: ProcessInfo.processInfo.systemUptime)
             if let overlay = overlays[key] {
                 _ = overlay.update(preferences: preferences, recalibrateNativeCenters: true)
-                syncWindowPositions()
+                syncWindowPositions(force: true)
                 refreshVisibility()
             } else {
                 scheduleRefresh()
@@ -248,8 +251,10 @@ final class WindowTracker {
         logger.debug("Visible overlays: \(shown, privacy: .public) / \(self.overlays.count, privacy: .public)")
     }
 
-    private func syncWindowPositions() {
+    private func syncWindowPositions(force: Bool = false) {
         guard preferences.enabled, AXIsProcessTrusted(), !overlays.isEmpty else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard trackingCadence.shouldSync(now: now, force: force) else { return }
         let records = cgWindowRecords()
         let indicesByID = Dictionary(uniqueKeysWithValues: records.enumerated().map { ($0.element.id, $0.offset) })
         let ownPID = ProcessInfo.processInfo.processIdentifier
