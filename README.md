@@ -73,6 +73,8 @@ swift test
 
 macOS 没有公开 API 可以全局修改原生红绿灯尺寸，因此本工具使用三个独立、非激活的透明窗口覆盖标准按钮。窗口移动期间通过 WindowServer 的窗口帧和窗口 ID 做高频同步，辅助功能 API 只用于发现标准按钮和执行原生操作。这是可逆的用户空间实现，不注入其他进程。
 
+AppKit 可以通过 `standardWindowButton(_:)` 修改当前进程自己拥有的窗口按钮，也可以用 `addChildWindow(_:ordered:)` 让同一进程持有的子窗口随父窗口同步移动。但全局工具通过辅助功能只能获得其他应用的 `AXUIElement`，无法取得对应的 `NSWindow` 对象。因此跨应用实现若不使用私有 WindowServer API、不关闭 SIP、不向目标应用注入代码，就无法把覆盖层真正挂进目标窗口的合成树。
+
 ## 隐私与许可
 
 隐私说明见 [PRIVACY.md](PRIVACY.md)。项目采用 [MIT License](LICENSE)。

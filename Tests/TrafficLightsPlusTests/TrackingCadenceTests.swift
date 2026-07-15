@@ -13,8 +13,8 @@ import Testing
 
     cadence.boost(now: 2.0)
     let firstActive = cadence.shouldSync(now: 2.0)
-    let earlyActive = cadence.shouldSync(now: 2.004)
-    let nextActive = cadence.shouldSync(now: 2.009)
+    let earlyActive = cadence.shouldSync(now: 2.002)
+    let nextActive = cadence.shouldSync(now: 2.005)
     #expect(firstActive)
     #expect(!earlyActive)
     #expect(nextActive)

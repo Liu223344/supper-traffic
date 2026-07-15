@@ -75,9 +75,9 @@ final class WindowTracker {
         }
 
         timer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { [weak self] _ in self?.refreshAll() }
-        // Apple Silicon can comfortably sample WindowServer at high-refresh rates,
-        // which keeps a separate overlay visually attached during a drag.
-        positionTimer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+        // The timer matches the active tracking rate. TrackingCadence skips most
+        // callbacks while idle, so 240 Hz is used only around moves and resizes.
+        positionTimer = Timer(timeInterval: TrackingCadence.activeInterval, repeats: true) { [weak self] _ in
             self?.syncWindowPositions()
         }
         RunLoop.main.add(positionTimer!, forMode: .common)

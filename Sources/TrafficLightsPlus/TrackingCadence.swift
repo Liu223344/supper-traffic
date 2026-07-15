@@ -2,7 +2,7 @@ import Foundation
 
 struct TrackingCadence {
     static let idleInterval = 1.0 / 10.0
-    static let activeInterval = 1.0 / 120.0
+    static let activeInterval = 1.0 / 240.0
     static let activeDuration = 0.35
 
     private(set) var highFrequencyUntil = 0.0
