@@ -19,6 +19,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(preferences.closeBehavior == .closeWindow)
         #expect(preferences.minimizeBehavior == .minimizeWindow)
         #expect(preferences.zoomBehavior == .zoomWindow)
+        #expect(preferences.hideDuringFastDrag)
     }
 }
 
@@ -32,6 +33,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         preferences.closeBehavior = .quitApplication
         preferences.minimizeBehavior = .hideApplication
         preferences.zoomBehavior = .doNothing
+        preferences.hideDuringFastDrag = false
 
         let restored = Preferences(defaults: defaults)
         #expect(!restored.enabled)
@@ -41,6 +43,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(restored.closeBehavior == .quitApplication)
         #expect(restored.minimizeBehavior == .hideApplication)
         #expect(restored.zoomBehavior == .doNothing)
+        #expect(!restored.hideDuringFastDrag)
     }
 }
 
