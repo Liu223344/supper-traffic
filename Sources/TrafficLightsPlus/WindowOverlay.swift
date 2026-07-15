@@ -32,6 +32,7 @@ final class WindowOverlay {
     private var preparedActions = Set<WindowAction>()
     private var isShown = false
     private var lastDiagnostic = ""
+    private var hoverResetWorkItem: DispatchWorkItem?
 
     init(key: AXWindowKey) {
         self.key = key
@@ -39,6 +40,7 @@ final class WindowOverlay {
         panels = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { ($0, OverlayPanel(action: $0)) })
         for panel in panels.values {
             panel.overlayView.actionHandler = { [weak self] action in self?.perform(action) }
+            panel.overlayView.hoverHandler = { [weak self] hovered in self?.setGroupHovered(hovered) }
         }
     }
 
@@ -171,7 +173,28 @@ final class WindowOverlay {
     }
 
     private func hidePanels() {
+        hoverResetWorkItem?.cancel()
+        hoverResetWorkItem = nil
+        panels.values.forEach { $0.overlayView.resetInteractionState() }
         for panel in panels.values where panel.isVisible { panel.orderOut(nil) }
+    }
+
+    private func setGroupHovered(_ hovered: Bool) {
+        hoverResetWorkItem?.cancel()
+        hoverResetWorkItem = nil
+
+        if hovered {
+            panels.values.forEach { $0.overlayView.isGroupHovered = true }
+            return
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.panels.values.forEach { $0.overlayView.isGroupHovered = false }
+            self.hoverResetWorkItem = nil
+        }
+        hoverResetWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
     }
 
     private func perform(_ action: WindowAction) {

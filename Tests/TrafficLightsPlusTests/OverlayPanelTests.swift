@@ -11,3 +11,14 @@ import Testing
     #expect(panel.overlayView.frame.origin == .zero)
     #expect(panel.overlayView.frame.size == NSSize(width: 40, height: 40))
 }
+
+@MainActor
+@Test func overlayIsGrayUntilItsGroupIsHovered() {
+    let panel = OverlayPanel(action: .close)
+
+    #expect(!panel.overlayView.isColorVisible)
+    panel.overlayView.isGroupHovered = true
+    #expect(panel.overlayView.isColorVisible)
+    panel.overlayView.isGroupHovered = false
+    #expect(!panel.overlayView.isColorVisible)
+}

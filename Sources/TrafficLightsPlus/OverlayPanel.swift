@@ -11,7 +11,18 @@ final class OverlayButtonView: NSView {
     var style: ControlStyle = .macOS { didSet { needsDisplay = true } }
     var controlSize: CGFloat = 28 { didSet { needsDisplay = true } }
     var isControlEnabled = true { didSet { needsDisplay = true } }
+    var isGroupHovered = false { didSet { needsDisplay = true } }
     var actionHandler: ((WindowAction) -> Void)?
+    var hoverHandler: ((Bool) -> Void)?
+
+    var isColorVisible: Bool { isGroupHovered || isHovered || isPressed }
+
+    func resetInteractionState() {
+        isHovered = false
+        isPressed = false
+        isGroupHovered = false
+        needsDisplay = true
+    }
 
     private var isHovered = false
     private var isPressed = false
@@ -45,12 +56,14 @@ final class OverlayButtonView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
+        hoverHandler?(true)
         needsDisplay = true
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovered = false
         isPressed = false
+        hoverHandler?(false)
         needsDisplay = true
     }
 
@@ -72,17 +85,21 @@ final class OverlayButtonView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let rect = bounds
-        let baseColor = color(for: action)
+        let actionColor = color(for: action)
+        // Match the system's dynamic inactive-control color in light and dark mode.
+        let idleColor = NSColor.systemGray
         let fillColor: NSColor
 
         if !isControlEnabled {
-            fillColor = baseColor.withAlphaComponent(0.38)
+            fillColor = idleColor.withAlphaComponent(0.48)
         } else if isPressed {
-            fillColor = baseColor.blended(withFraction: 0.24, of: .black) ?? baseColor
+            fillColor = actionColor.blended(withFraction: 0.24, of: .black) ?? actionColor
         } else if isHovered {
-            fillColor = baseColor.blended(withFraction: 0.10, of: .black) ?? baseColor
+            fillColor = actionColor.blended(withFraction: 0.10, of: .black) ?? actionColor
+        } else if isGroupHovered {
+            fillColor = actionColor
         } else {
-            fillColor = baseColor
+            fillColor = idleColor
         }
 
         let path = style == .macOS
@@ -97,7 +114,7 @@ final class OverlayButtonView: NSView {
             path.stroke()
         }
 
-        if style != .macOS || isHovered || isPressed {
+        if style != .macOS || isColorVisible {
             drawSymbol(in: rect)
         }
     }
