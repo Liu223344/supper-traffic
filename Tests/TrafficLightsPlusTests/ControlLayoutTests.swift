@@ -53,6 +53,66 @@ import Testing
     #expect(visible == Set([.close, .minimize]))
 }
 
+@Test func activationRegionWrapsVisibleTrafficLightsWithPadding() throws {
+    let frames: [WindowAction: CGRect] = [
+        .close: CGRect(x: 100, y: 80, width: 28, height: 28),
+        .minimize: CGRect(x: 140, y: 80, width: 28, height: 28),
+        .zoom: CGRect(x: 180, y: 80, width: 28, height: 28)
+    ]
+
+    let region = try #require(ControlLayout.activationRegion(
+        controlFrames: frames,
+        actions: [.close, .minimize, .zoom]
+    ))
+    #expect(region == CGRect(x: 94, y: 74, width: 120, height: 40))
+
+    let partiallyVisible = try #require(ControlLayout.activationRegion(
+        controlFrames: frames,
+        actions: [.close, .minimize]
+    ))
+    #expect(partiallyVisible == CGRect(x: 94, y: 74, width: 80, height: 40))
+}
+
+@Test func presentationFrameInterpolatesWithoutJumping() {
+    let native = CGRect(x: 100, y: 80, width: 14, height: 14)
+    let enlarged = CGRect(x: 93, y: 73, width: 28, height: 28)
+
+    #expect(ControlLayout.interpolatedFrame(from: native, to: enlarged, progress: 0) == native)
+    #expect(ControlLayout.interpolatedFrame(from: native, to: enlarged, progress: 0.5)
+        == CGRect(x: 96.5, y: 76.5, width: 21, height: 21))
+    #expect(ControlLayout.interpolatedFrame(from: native, to: enlarged, progress: 1) == enlarged)
+}
+
+@Test func presentationProgressSupportsImmediateReversal() {
+    let expandedHalfway = ControlLayout.nextPresentationProgress(
+        current: 0,
+        elapsed: 0.05,
+        expanding: true,
+        duration: 0.10
+    )
+    #expect(expandedHalfway == 0.5)
+
+    let reversed = ControlLayout.nextPresentationProgress(
+        current: expandedHalfway,
+        elapsed: 0.02,
+        expanding: false,
+        duration: 0.10
+    )
+    #expect(abs(reversed - 0.3) < 0.0001)
+    #expect(ControlLayout.nextPresentationProgress(
+        current: 0.95,
+        elapsed: 1,
+        expanding: true,
+        duration: 0.10
+    ) == 1)
+    #expect(ControlLayout.nextPresentationProgress(
+        current: 0.05,
+        elapsed: 1,
+        expanding: false,
+        duration: 0.10
+    ) == 0)
+}
+
 @Test func macOSFramesHaveDraggableGaps() throws {
     let frames = ControlLayout.frames(
         style: .macOS,

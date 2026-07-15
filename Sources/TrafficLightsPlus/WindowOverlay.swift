@@ -16,7 +16,18 @@ struct AXWindowKey: Hashable {
     }
 }
 
+enum OverlayPresentationState {
+    case hidden
+    case expanding
+    case visible
+    case collapsing
+    case suppressed
+}
+
 final class WindowOverlay {
+    private static let minimizeDispatchDelay = 1.0 / 120.0
+    private static let revealDuration = 0.10
+
     let key: AXWindowKey
     private let panels: [WindowAction: OverlayPanel]
     private(set) var windowFrame = CGRect.zero
@@ -27,14 +38,21 @@ final class WindowOverlay {
     private let logger = Logger(subsystem: "app.trafficlightsplus.mac", category: "window-overlay")
     private var targetButtons: [WindowAction: AXUIElement] = [:]
     private var nativeCenterOffsets: [WindowAction: CGPoint] = [:]
+    private var nativeFrameOffsets: [WindowAction: CGRect] = [:]
     private var preparedCGFrames: [WindowAction: CGRect] = [:]
     private var preparedActions = Set<WindowAction>()
+    private var availableActions = Set<WindowAction>()
     private var visibleActions = Set<WindowAction>()
     private var configuredBehaviors: [WindowAction: ButtonBehavior] = [:]
     private(set) var isSuppressed = false
     private var isEligibleForDisplay = true
     private var lastDiagnostic = ""
     private var hoverResetWorkItem: DispatchWorkItem?
+    private var minimizeRequestGeneration = 0
+    private var hiddenModeEnabled = true
+    private var presentationProgress: CGFloat = 0
+    private var lastPresentationUpdate = 0.0
+    private(set) var presentationState = OverlayPresentationState.hidden
 
     init(key: AXWindowKey) {
         self.key = key
@@ -84,14 +102,20 @@ final class WindowOverlay {
         for action in WindowAction.allCases {
             guard let button: AXUIElement = copyAttribute(attribute(for: action), from: window) else { continue }
             buttons[action] = button
+            if let nativeFrame = axFrame(of: button),
+               recalibrateNativeCenters || nativeFrameOffsets[action] == nil {
+                nativeFrameOffsets[action] = CGRect(
+                    x: nativeFrame.minX - frame.minX,
+                    y: nativeFrame.minY - frame.minY,
+                    width: nativeFrame.width,
+                    height: nativeFrame.height
+                )
+                nativeCenterOffsets[action] = CGPoint(
+                    x: nativeFrame.midX - frame.minX,
+                    y: nativeFrame.midY - frame.minY
+                )
+            }
             if preferences.style == .macOS {
-                if let nativeFrame = axFrame(of: button),
-                   recalibrateNativeCenters || nativeCenterOffsets[action] == nil {
-                    nativeCenterOffsets[action] = CGPoint(
-                        x: nativeFrame.midX - frame.minX,
-                        y: nativeFrame.midY - frame.minY
-                    )
-                }
                 if let offset = nativeCenterOffsets[action] {
                     let nativeCenter = CGPoint(x: frame.minX + offset.x, y: frame.minY + offset.y)
                     let center = ControlLayout.centerByAdjustingSystemSpacing(
@@ -144,12 +168,16 @@ final class WindowOverlay {
             panel.overlayView.isControlEnabled = isBehaviorEnabled(behavior, buttons: buttons)
             panel.overlayView.isWindowActive = isActiveWindow
             let newFrame = NSRect(origin: origin, size: cgFrame.size)
-            if panel.frame != newFrame { panel.setFrame(newFrame, display: true) }
+            if !panel.isVisible, panel.frame != newFrame { panel.setFrame(newFrame, display: true) }
             preparedCGFrames[action] = cgFrame
             preparedActions.insert(action)
         }
 
-        setVisibleActions(visibleActions.intersection(preparedActions))
+        availableActions.formIntersection(preparedActions)
+        for action in WindowAction.allCases where !preparedActions.contains(action) {
+            panels[action]?.orderOut(nil)
+            visibleActions.remove(action)
+        }
         return !preparedActions.isEmpty
     }
 
@@ -162,6 +190,7 @@ final class WindowOverlay {
     }
 
     func syncPosition(to currentWindowFrame: CGRect) {
+        guard !isSuppressed else { return }
         let delta = CGPoint(
             x: currentWindowFrame.minX - windowFrame.minX,
             y: currentWindowFrame.minY - windowFrame.minY
@@ -171,76 +200,177 @@ final class WindowOverlay {
         windowFrame.origin = currentWindowFrame.origin
 
         for action in preparedActions {
-            guard let panel = panels[action], var cgFrame = preparedCGFrames[action] else { continue }
+            guard var cgFrame = preparedCGFrames[action] else { continue }
             cgFrame.origin.x += delta.x
             cgFrame.origin.y += delta.y
             preparedCGFrames[action] = cgFrame
-            guard let origin = appKitOrigin(forCGPoint: cgFrame.origin, size: cgFrame.size) else { continue }
-            let newFrame = NSRect(origin: origin, size: cgFrame.size)
-            if panel.frame != newFrame { panel.setFrame(newFrame, display: true) }
         }
     }
 
-    func setVisible(_ visible: Bool) {
-        setVisibleActions(visible ? preparedActions : [])
+    func updatePresentation(
+        availableActions actions: Set<WindowAction>,
+        mouseLocation: NSPoint,
+        hiddenModeEnabled: Bool,
+        now: TimeInterval = ProcessInfo.processInfo.systemUptime
+    ) {
+        self.hiddenModeEnabled = hiddenModeEnabled
+        guard !isSuppressed, isEligibleForDisplay else {
+            presentationState = .suppressed
+            presentationProgress = 0
+            hidePanels()
+            return
+        }
+
+        availableActions = actions.intersection(preparedActions)
+        guard !availableActions.isEmpty else {
+            presentationState = .hidden
+            presentationProgress = 0
+            hidePanels()
+            return
+        }
+
+        let pointerInside = pointerInsideActivationRegion(mouseLocation)
+        let shouldExpand = !hiddenModeEnabled || pointerInside
+        let elapsed = lastPresentationUpdate > 0 ? min(max(now - lastPresentationUpdate, 0), 0.05) : 0
+        lastPresentationUpdate = now
+
+        if !hiddenModeEnabled {
+            presentationProgress = 1
+        } else {
+            presentationProgress = ControlLayout.nextPresentationProgress(
+                current: presentationProgress,
+                elapsed: elapsed,
+                expanding: shouldExpand,
+                duration: Self.revealDuration
+            )
+        }
+
+        switch (shouldExpand, presentationProgress) {
+        case (_, 0): presentationState = .hidden
+        case (true, 1): presentationState = .visible
+        case (true, _): presentationState = .expanding
+        case (false, _): presentationState = .collapsing
+        }
+
+        renderPresentation(mouseLocation: mouseLocation)
     }
 
-    func setVisibleActions(_ actions: Set<WindowAction>) {
-        let nextActions = isSuppressed || !isEligibleForDisplay
-            ? []
-            : actions.intersection(preparedActions)
-        guard nextActions != visibleActions else { return }
-        visibleActions = nextActions
+    private func renderPresentation(mouseLocation: NSPoint) {
+        let progress = presentationProgress * presentationProgress * (3 - 2 * presentationProgress)
+        let shouldShow = progress > 0
+        var nextVisibleActions = Set<WindowAction>()
+        var pointerInsideButton = false
 
         for action in WindowAction.allCases {
             guard let panel = panels[action] else { continue }
-            if nextActions.contains(action) {
-                panel.orderFrontRegardless()
-            } else {
+            guard shouldShow,
+                  availableActions.contains(action),
+                  let nativeFrame = nativeCGFrame(for: action),
+                  let targetFrame = preparedCGFrames[action] else {
                 panel.overlayView.resetInteractionState()
                 if panel.isVisible { panel.orderOut(nil) }
+                continue
             }
+
+            let cgFrame = ControlLayout.interpolatedFrame(
+                from: nativeFrame,
+                to: targetFrame,
+                progress: progress
+            )
+            guard let frame = appKitFrame(for: cgFrame) else {
+                if panel.isVisible { panel.orderOut(nil) }
+                continue
+            }
+
+            if panel.frame != frame { panel.setFrame(frame, display: true) }
+            panel.alphaValue = progress
+            if !panel.isVisible { panel.orderFrontRegardless() }
+            nextVisibleActions.insert(action)
+
+            let pointerInside = frame.contains(mouseLocation)
+            panel.overlayView.setPointerInside(pointerInside)
+            pointerInsideButton = pointerInsideButton || pointerInside
         }
 
-        if nextActions.isEmpty {
+        visibleActions = nextVisibleActions
+        if visibleActions.isEmpty {
             hoverResetWorkItem?.cancel()
             hoverResetWorkItem = nil
+        } else {
+            setGroupHovered(pointerInsideButton)
         }
     }
 
-    func reconcileHoverState(mouseLocation: NSPoint) {
-        guard !visibleActions.isEmpty else { return }
-        var pointerInsideGroup = false
-        for action in visibleActions {
-            guard let panel = panels[action] else { continue }
-            let pointerInsideButton = panel.frame.contains(mouseLocation)
-            panel.overlayView.setPointerInside(pointerInsideButton)
-            pointerInsideGroup = pointerInsideGroup || pointerInsideButton
+    private func pointerInsideActivationRegion(_ mouseLocation: NSPoint) -> Bool {
+        guard let cgRegion = ControlLayout.activationRegion(
+            controlFrames: preparedCGFrames,
+            actions: availableActions
+        ), let region = appKitFrame(for: cgRegion) else { return false }
+        return region.contains(mouseLocation)
+    }
+
+    private func nativeCGFrame(for action: WindowAction) -> CGRect? {
+        if let offset = nativeFrameOffsets[action] {
+            return CGRect(
+                x: windowFrame.minX + offset.minX,
+                y: windowFrame.minY + offset.minY,
+                width: offset.width,
+                height: offset.height
+            )
         }
-        setGroupHovered(pointerInsideGroup)
+        guard let targetFrame = preparedCGFrames[action] else { return nil }
+        return ControlLayout.frameCentered(on: targetFrame, controlSize: min(14, targetFrame.width))
+    }
+
+    private func appKitFrame(for cgFrame: CGRect) -> NSRect? {
+        for screen in NSScreen.screens {
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                continue
+            }
+            let cgBounds = CGDisplayBounds(CGDirectDisplayID(number.uint32Value))
+            guard cgBounds.intersects(cgFrame) else { continue }
+            return NSRect(
+                x: screen.frame.minX + cgFrame.minX - cgBounds.minX,
+                y: screen.frame.maxY - (cgFrame.minY - cgBounds.minY) - cgFrame.height,
+                width: cgFrame.width,
+                height: cgFrame.height
+            )
+        }
+        return nil
     }
 
     func hide() {
+        presentationProgress = 0
+        lastPresentationUpdate = 0
+        presentationState = isSuppressed ? .suppressed : .hidden
         visibleActions.removeAll(keepingCapacity: true)
         hidePanels()
     }
 
     func suppressUntilRestored() {
+        minimizeRequestGeneration += 1
         isSuppressed = true
         isEligibleForDisplay = false
         hide()
     }
 
     func restoreFromSuppression() {
+        minimizeRequestGeneration += 1
         isSuppressed = false
         isEligibleForDisplay = true
+        presentationProgress = 0
+        lastPresentationUpdate = 0
+        presentationState = .hidden
     }
 
     private func hidePanels() {
         hoverResetWorkItem?.cancel()
         hoverResetWorkItem = nil
         panels.values.forEach { $0.overlayView.resetInteractionState() }
-        for panel in panels.values where panel.isVisible { panel.orderOut(nil) }
+        for panel in panels.values {
+            panel.alphaValue = 1
+            if panel.isVisible { panel.orderOut(nil) }
+        }
     }
 
     private func setGroupHovered(_ hovered: Bool) {
@@ -268,9 +398,11 @@ final class WindowOverlay {
 
         if let nativeAction = behavior.nativeWindowAction {
             guard let button = targetButtons[nativeAction] else { NSSound.beep(); return }
-            if behavior == .minimizeWindow { suppressUntilRestored() }
+            if behavior == .minimizeWindow {
+                performMinimize(using: button)
+                return
+            }
             if AXUIElementPerformAction(button, kAXPressAction as CFString) != .success {
-                if behavior == .minimizeWindow { restoreFromSuppression() }
                 NSSound.beep()
             }
             return
@@ -289,6 +421,26 @@ final class WindowOverlay {
             break
         case .closeWindow, .minimizeWindow, .zoomWindow:
             break
+        }
+    }
+
+    private func performMinimize(using button: AXUIElement) {
+        let actionsToRestore = visibleActions
+        suppressUntilRestored()
+        let generation = minimizeRequestGeneration
+
+        // Give WindowServer one display frame to remove all three overlay panels
+        // before the target application begins its minimize animation.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.minimizeDispatchDelay) { [weak self] in
+            guard let self, generation == self.minimizeRequestGeneration else { return }
+            if AXUIElementPerformAction(button, kAXPressAction as CFString) != .success {
+                self.restoreFromSuppression()
+                self.availableActions = actionsToRestore.intersection(self.preparedActions)
+                self.presentationProgress = 1
+                self.presentationState = .visible
+                self.renderPresentation(mouseLocation: NSEvent.mouseLocation)
+                NSSound.beep()
+            }
         }
     }
 

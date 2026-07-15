@@ -18,6 +18,7 @@ final class Preferences: ObservableObject {
         static let size = "controlSize"
         static let spacing = "controlSpacingAdjustment"
         static let style = "controlStyle"
+        static let hiddenTrafficLightsEnabled = "hiddenTrafficLightsEnabled"
         static let showInFullScreen = "showInFullScreen"
         static let closeBehavior = "closeButtonBehavior"
         static let minimizeBehavior = "minimizeButtonBehavior"
@@ -40,6 +41,10 @@ final class Preferences: ObservableObject {
 
     @Published var style: ControlStyle {
         didSet { defaults.set(style.rawValue, forKey: Key.style) }
+    }
+
+    @Published var hiddenTrafficLightsEnabled: Bool {
+        didSet { defaults.set(hiddenTrafficLightsEnabled, forKey: Key.hiddenTrafficLightsEnabled) }
     }
 
     @Published var showInFullScreen: Bool {
@@ -65,6 +70,7 @@ final class Preferences: ObservableObject {
             Key.size: 28.0,
             Key.spacing: 0.0,
             Key.style: ControlStyle.macOS.rawValue,
+            Key.hiddenTrafficLightsEnabled: true,
             Key.showInFullScreen: false,
             Key.closeBehavior: ButtonBehavior.closeWindow.rawValue,
             Key.minimizeBehavior: ButtonBehavior.minimizeWindow.rawValue,
@@ -77,6 +83,7 @@ final class Preferences: ObservableObject {
             ControlLayout.spacingAdjustmentRange.upperBound
         )
         style = ControlStyle(rawValue: defaults.string(forKey: Key.style) ?? "") ?? .macOS
+        hiddenTrafficLightsEnabled = defaults.bool(forKey: Key.hiddenTrafficLightsEnabled)
         showInFullScreen = defaults.bool(forKey: Key.showInFullScreen)
         closeBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.closeBehavior) ?? "") ?? .closeWindow
         minimizeBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.minimizeBehavior) ?? "") ?? .minimizeWindow

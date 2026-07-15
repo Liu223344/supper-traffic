@@ -163,6 +163,8 @@ struct SettingsView: View {
                 }
             }
 
+            Toggle("隐藏式红绿灯", isOn: $preferences.hiddenTrafficLightsEnabled)
+
             Toggle("在全屏窗口中显示", isOn: $preferences.showInFullScreen)
 
             VStack(alignment: .leading, spacing: 10) {

@@ -22,9 +22,11 @@ import Testing
 
     overlay.suppressUntilRestored()
     #expect(overlay.isSuppressed)
+    #expect(overlay.presentationState == .suppressed)
 
     overlay.restoreFromSuppression()
     #expect(!overlay.isSuppressed)
+    #expect(overlay.presentationState == .hidden)
 }
 
 @MainActor

@@ -13,6 +13,7 @@
 - Hid overlays before minimization begins and restored them only after the window leaves the Dock.
 - Kept WindowServer position and occlusion sampling at a continuous 120 Hz for predictable real-time tracking.
 - Added independently adjustable spacing for the three circular macOS traffic-light controls.
+- Added an enabled-by-default hidden traffic-light mode that reveals enlarged controls near the window corner.
 
 ## 1.0.0 - 2026-07-14
 

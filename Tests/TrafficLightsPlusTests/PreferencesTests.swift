@@ -16,6 +16,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(preferences.size == 28)
         #expect(preferences.spacing == 0)
         #expect(preferences.style == .macOS)
+        #expect(preferences.hiddenTrafficLightsEnabled)
         #expect(!preferences.showInFullScreen)
         #expect(preferences.closeBehavior == .closeWindow)
         #expect(preferences.minimizeBehavior == .minimizeWindow)
@@ -30,6 +31,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         preferences.size = 42
         preferences.spacing = 12
         preferences.style = .edgeSquares
+        preferences.hiddenTrafficLightsEnabled = false
         preferences.showInFullScreen = true
         preferences.closeBehavior = .quitApplication
         preferences.minimizeBehavior = .hideApplication
@@ -40,6 +42,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(restored.size == 42)
         #expect(restored.spacing == 12)
         #expect(restored.style == .edgeSquares)
+        #expect(!restored.hiddenTrafficLightsEnabled)
         #expect(restored.showInFullScreen)
         #expect(restored.closeBehavior == .quitApplication)
         #expect(restored.minimizeBehavior == .hideApplication)

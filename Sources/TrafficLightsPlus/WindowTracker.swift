@@ -227,6 +227,7 @@ final class WindowTracker {
     private func refreshVisibility() {
         let records = cgWindowRecords()
         let ownPID = ProcessInfo.processInfo.processIdentifier
+        let mouseLocation = NSEvent.mouseLocation
         var shown = 0
 
         for overlay in overlays.values {
@@ -243,7 +244,11 @@ final class WindowTracker {
                 in: records,
                 ownPID: ownPID
             )
-            overlay.setVisibleActions(visibleActions)
+            overlay.updatePresentation(
+                availableActions: visibleActions,
+                mouseLocation: mouseLocation,
+                hiddenModeEnabled: preferences.hiddenTrafficLightsEnabled
+            )
             if !visibleActions.isEmpty { shown += 1 }
         }
         logger.debug("Visible overlays: \(shown, privacy: .public) / \(self.overlays.count, privacy: .public)")
@@ -263,7 +268,7 @@ final class WindowTracker {
                 if targetIndex == nil {
                     // A stale overlay is more visible than a one-frame hide while
                     // WindowServer replaces or removes a window record.
-                    overlay.setVisible(false)
+                    overlay.hide()
                     continue
                 }
             } else {
@@ -274,13 +279,17 @@ final class WindowTracker {
             let record = records[targetIndex]
             overlay.bind(to: record.id)
             overlay.syncPosition(to: record.bounds)
-            overlay.setVisibleActions(unobscuredActions(
+            let visibleActions = unobscuredActions(
                 for: overlay,
                 above: targetIndex,
                 in: records,
                 ownPID: ownPID
-            ))
-            overlay.reconcileHoverState(mouseLocation: mouseLocation)
+            )
+            overlay.updatePresentation(
+                availableActions: visibleActions,
+                mouseLocation: mouseLocation,
+                hiddenModeEnabled: preferences.hiddenTrafficLightsEnabled
+            )
         }
     }
 
