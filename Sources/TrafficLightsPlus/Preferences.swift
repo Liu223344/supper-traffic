@@ -19,7 +19,7 @@ enum HiddenTrafficLightRevealMode: String, CaseIterable {
     var title: String {
         switch self {
         case .group: return "整组"
-        case .nearest: return "单个"
+        case .nearest: return "单个（推荐）"
         }
     }
 }

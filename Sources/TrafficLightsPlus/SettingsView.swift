@@ -4,6 +4,8 @@ import AppKit
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    static let hiddenTrafficLightsTitle = "隐藏式红绿灯（推荐）"
+
     @ObservedObject var preferences: Preferences
     @State private var accessibilityGranted = AXIsProcessTrusted()
     @State private var appSelectionError = ""
@@ -172,7 +174,7 @@ struct SettingsView: View {
                 }
             }
 
-            Toggle("隐藏式红绿灯", isOn: $preferences.hiddenTrafficLightsEnabled)
+            Toggle(Self.hiddenTrafficLightsTitle, isOn: $preferences.hiddenTrafficLightsEnabled)
 
             if preferences.hiddenTrafficLightsEnabled {
                 Picker("放大方式", selection: $preferences.hiddenTrafficLightRevealMode) {

@@ -26,6 +26,12 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
     }
 }
 
+@Test func recommendedHiddenTrafficLightCopyIsStable() {
+    #expect(SettingsView.hiddenTrafficLightsTitle == "隐藏式红绿灯（推荐）")
+    #expect(HiddenTrafficLightRevealMode.group.title == "整组")
+    #expect(HiddenTrafficLightRevealMode.nearest.title == "单个（推荐）")
+}
+
 @Test func preferencesPersist() {
     withDefaults { defaults in
         let preferences = Preferences(defaults: defaults)
