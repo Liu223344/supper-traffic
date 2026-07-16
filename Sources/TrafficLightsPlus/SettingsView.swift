@@ -1,9 +1,13 @@
 import SwiftUI
 import ApplicationServices
+import AppKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @ObservedObject var preferences: Preferences
     @State private var accessibilityGranted = AXIsProcessTrusted()
+    @State private var appSelectionError = ""
+    @State private var isShowingAppSelectionError = false
 
     var body: some View {
         ScrollView(.vertical) {
@@ -20,6 +24,11 @@ struct SettingsView: View {
         .frame(width: 480, height: 680)
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             accessibilityGranted = AXIsProcessTrusted()
+        }
+        .alert("无法添加应用", isPresented: $isShowingAppSelectionError) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(appSelectionError)
         }
     }
 
@@ -201,6 +210,60 @@ struct SettingsView: View {
                     selection: $preferences.zoomBehavior
                 )
             }
+
+            if preferences.hasCloseWindowBehavior {
+                quitOnCloseApplications
+            }
+        }
+    }
+
+    private var quitOnCloseApplications: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("关闭时退出的应用")
+                    .font(.headline)
+                Spacer()
+                Button(action: chooseQuitOnCloseApplication) {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help("添加应用")
+                .accessibilityLabel("添加关闭时退出的应用")
+            }
+
+            if preferences.quitOnCloseApplications.isEmpty {
+                Text("尚未添加应用")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(preferences.quitOnCloseApplications) { application in
+                    HStack(spacing: 10) {
+                        Image(nsImage: icon(for: application))
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(application.displayName)
+                                .lineLimit(1)
+                            Text(application.bundleIdentifier)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer()
+                        Button {
+                            preferences.removeQuitOnCloseApplication(
+                                bundleIdentifier: application.bundleIdentifier
+                            )
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("从名单中移除")
+                        .accessibilityLabel("移除 \(application.displayName)")
+                    }
+                }
+            }
         }
     }
 
@@ -258,6 +321,43 @@ struct SettingsView: View {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    private func chooseQuitOnCloseApplication() {
+        let panel = NSOpenPanel()
+        panel.title = "选择关闭时退出的应用"
+        panel.prompt = "添加"
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let bundle = Bundle(url: url),
+              let bundleIdentifier = bundle.bundleIdentifier,
+              !bundleIdentifier.isEmpty else {
+            appSelectionError = "所选应用没有可识别的 Bundle ID。"
+            isShowingAppSelectionError = true
+            return
+        }
+
+        let displayName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? url.deletingPathExtension().lastPathComponent
+        _ = preferences.addQuitOnCloseApplication(
+            bundleIdentifier: bundleIdentifier,
+            displayName: displayName
+        )
+    }
+
+    private func icon(for application: QuitOnCloseApplication) -> NSImage {
+        if let url = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: application.bundleIdentifier
+        ) {
+            return NSWorkspace.shared.icon(forFile: url.path)
+        }
+        return NSImage(systemSymbolName: "app", accessibilityDescription: application.displayName)
+            ?? NSImage(size: NSSize(width: 28, height: 28))
     }
 }
 

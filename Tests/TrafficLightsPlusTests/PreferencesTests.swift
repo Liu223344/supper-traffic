@@ -22,6 +22,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(preferences.closeBehavior == .closeWindow)
         #expect(preferences.minimizeBehavior == .minimizeWindow)
         #expect(preferences.zoomBehavior == .zoomWindow)
+        #expect(preferences.quitOnCloseApplications.isEmpty)
     }
 }
 
@@ -38,6 +39,10 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         preferences.closeBehavior = .quitApplication
         preferences.minimizeBehavior = .hideApplication
         preferences.zoomBehavior = .doNothing
+        preferences.addQuitOnCloseApplication(
+            bundleIdentifier: "com.example.editor",
+            displayName: "Editor"
+        )
 
         let restored = Preferences(defaults: defaults)
         #expect(!restored.enabled)
@@ -50,6 +55,88 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(restored.closeBehavior == .quitApplication)
         #expect(restored.minimizeBehavior == .hideApplication)
         #expect(restored.zoomBehavior == .doNothing)
+        #expect(restored.quitOnCloseApplications == [
+            QuitOnCloseApplication(bundleIdentifier: "com.example.editor", displayName: "Editor")
+        ])
+    }
+}
+
+@Test func quitOnCloseApplicationsCanBeAddedDeduplicatedAndRemoved() {
+    withDefaults { defaults in
+        let preferences = Preferences(defaults: defaults)
+
+        #expect(preferences.addQuitOnCloseApplication(
+            bundleIdentifier: "com.example.editor",
+            displayName: "Editor"
+        ))
+        #expect(!preferences.addQuitOnCloseApplication(
+            bundleIdentifier: "COM.EXAMPLE.EDITOR",
+            displayName: "Duplicate"
+        ))
+        #expect(preferences.quitOnCloseApplications.count == 1)
+        #expect(preferences.shouldQuitOnClose(bundleIdentifier: "COM.EXAMPLE.EDITOR"))
+
+        preferences.removeQuitOnCloseApplication(bundleIdentifier: "com.example.editor")
+        #expect(preferences.quitOnCloseApplications.isEmpty)
+        #expect(!preferences.shouldQuitOnClose(bundleIdentifier: "com.example.editor"))
+    }
+}
+
+@Test func corruptStoredQuitOnCloseApplicationsFallBackToEmpty() {
+    withDefaults { defaults in
+        defaults.set(Data("not-json".utf8), forKey: "quitOnCloseApplications")
+        #expect(Preferences(defaults: defaults).quitOnCloseApplications.isEmpty)
+    }
+}
+
+@Test func quitOnCloseOnlyOverridesConfiguredCloseBehaviors() {
+    withDefaults { defaults in
+        let preferences = Preferences(defaults: defaults)
+        preferences.addQuitOnCloseApplication(
+            bundleIdentifier: "com.example.editor",
+            displayName: "Editor"
+        )
+
+        #expect(preferences.effectiveBehavior(
+            for: .close,
+            bundleIdentifier: "com.example.editor"
+        ) == .quitApplication)
+        #expect(preferences.effectiveBehavior(
+            for: .close,
+            bundleIdentifier: "com.example.other"
+        ) == .closeWindow)
+
+        preferences.minimizeBehavior = .closeWindow
+        #expect(preferences.effectiveBehavior(
+            for: .minimize,
+            bundleIdentifier: "com.example.editor"
+        ) == .quitApplication)
+
+        preferences.zoomBehavior = .zoomWindow
+        #expect(preferences.effectiveBehavior(
+            for: .zoom,
+            bundleIdentifier: "com.example.editor"
+        ) == .zoomWindow)
+    }
+}
+
+@Test func quitOnCloseApplicationsSurviveBehaviorVisibilityAndResetChanges() {
+    withDefaults { defaults in
+        let preferences = Preferences(defaults: defaults)
+        preferences.addQuitOnCloseApplication(
+            bundleIdentifier: "com.example.editor",
+            displayName: "Editor"
+        )
+
+        preferences.closeBehavior = .doNothing
+        preferences.minimizeBehavior = .minimizeWindow
+        preferences.zoomBehavior = .zoomWindow
+        #expect(!preferences.hasCloseWindowBehavior)
+        #expect(preferences.quitOnCloseApplications.count == 1)
+
+        preferences.resetButtonBehaviors()
+        #expect(preferences.hasCloseWindowBehavior)
+        #expect(preferences.quitOnCloseApplications.count == 1)
     }
 }
 

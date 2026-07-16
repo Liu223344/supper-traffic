@@ -96,12 +96,16 @@ final class WindowOverlay {
 
         windowFrame = frame
         title = copyAttribute(kAXTitleAttribute as CFString, from: window) ?? ""
-        let appIsActive = NSRunningApplication(processIdentifier: key.pid)?.isActive ?? false
+        let application = NSRunningApplication(processIdentifier: key.pid)
+        let appIsActive = application?.isActive ?? false
         let windowIsFocused: Bool = copyAttribute(kAXFocusedAttribute as CFString, from: window) ?? false
         let windowIsMain: Bool = copyAttribute(kAXMainAttribute as CFString, from: window) ?? false
         let isActiveWindow = appIsActive && (windowIsFocused || windowIsMain)
         configuredBehaviors = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map {
-            ($0, preferences.behavior(for: $0))
+            ($0, preferences.effectiveBehavior(
+                for: $0,
+                bundleIdentifier: application?.bundleIdentifier
+            ))
         })
         let controlSize = ControlLayout.effectiveSize(preferred: preferences.size)
         var buttons: [WindowAction: AXUIElement] = [:]
