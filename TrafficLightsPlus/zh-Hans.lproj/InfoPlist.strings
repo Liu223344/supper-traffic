@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "Traffic Lights Plus";
+"CFBundleName" = "Traffic Lights Plus";
+"NSAccessibilityUsageDescription" = "Traffic Lights Plus 使用辅助功能权限定位可见窗口的标准按钮，并执行您配置的关闭、最小化和缩放操作。";

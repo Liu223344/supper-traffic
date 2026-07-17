@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "Traffic Lights Plus";
+"CFBundleName" = "Traffic Lights Plus";
+"NSAccessibilityUsageDescription" = "Traffic Lights Plus uses Accessibility access to locate standard controls in visible windows and perform your configured close, minimize, and zoom actions.";
