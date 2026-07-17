@@ -113,7 +113,8 @@ import Testing
     ) == 0)
 }
 
-@Test func minimizeDismissalShrinksToNativeSizeInSixtyMilliseconds() {
+@Test func minimizeDismissalShrinksToZeroBeforeNativeAnimationCompletes() {
+    let startFrame = CGRect(x: 100, y: 80, width: 28, height: 20)
     let halfway = ControlLayout.nextPresentationProgress(
         current: 1,
         elapsed: WindowOverlay.minimizeDismissDuration / 2,
@@ -129,6 +130,32 @@ import Testing
 
     #expect(abs(halfway - 0.5) < 0.0001)
     #expect(hidden == 0)
+
+    let initialFrame = ControlLayout.frameScaledAroundCenter(startFrame, progress: 1)
+    let halfwayFrame = ControlLayout.frameScaledAroundCenter(startFrame, progress: halfway)
+    let hiddenFrame = ControlLayout.frameScaledAroundCenter(startFrame, progress: hidden)
+
+    #expect(initialFrame == startFrame)
+    #expect(halfwayFrame == CGRect(x: 107, y: 85, width: 14, height: 10))
+    #expect(hiddenFrame.width == 0)
+    #expect(hiddenFrame.height == 0)
+    #expect(hiddenFrame.midX == startFrame.midX)
+    #expect(hiddenFrame.midY == startFrame.midY)
+}
+
+@Test func nativeMinimizeStartsWhileOverlayDismissalIsRunning() {
+    #expect(WindowOverlay.minimizeActionDelay > 0)
+    #expect(WindowOverlay.minimizeActionDelay < WindowOverlay.minimizeDismissDuration)
+}
+
+@Test func dismissalFrameScalingClampsProgress() {
+    let frame = CGRect(x: 20, y: 30, width: 40, height: 30)
+
+    #expect(ControlLayout.frameScaledAroundCenter(frame, progress: 2) == frame)
+    let hidden = ControlLayout.frameScaledAroundCenter(frame, progress: -1)
+    #expect(hidden.size == .zero)
+    #expect(hidden.midX == frame.midX)
+    #expect(hidden.midY == frame.midY)
 }
 
 @Test func nearestActionUsesDirectHitsAndGapDistance() {

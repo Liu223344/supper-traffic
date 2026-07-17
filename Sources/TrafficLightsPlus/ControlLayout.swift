@@ -102,6 +102,17 @@ struct ControlLayout {
         )
     }
 
+    static func frameScaledAroundCenter(_ frame: CGRect, progress: CGFloat) -> CGRect {
+        let progress = min(max(progress, 0), 1)
+        let size = CGSize(width: frame.width * progress, height: frame.height * progress)
+        return CGRect(
+            x: frame.midX - size.width / 2,
+            y: frame.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
+    }
+
     static func nextPresentationProgress(
         current: CGFloat,
         elapsed: TimeInterval,
