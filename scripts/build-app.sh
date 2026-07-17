@@ -2,20 +2,34 @@
 set -euo pipefail
 
 ROOT="${0:A:h:h}"
-APP="$ROOT/build/Traffic Lights Plus.app"
+TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
+APP="${APP_OUTPUT:-$ROOT/build/Traffic Lights Plus.app}"
 ICONSET="$ROOT/.build/AppIcon.iconset"
 ICON="$ROOT/Resources/AppIcon.icns"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
-APP_BINARY="$ROOT/.build/arm64/arm64-apple-macosx/release/TrafficLightsPlus"
+
+case "$TARGET_ARCH" in
+    arm64|x86_64) ;;
+    *)
+        echo "Unsupported TARGET_ARCH: $TARGET_ARCH (expected arm64 or x86_64)" >&2
+        exit 1
+        ;;
+esac
+
+TRIPLE="$TARGET_ARCH-apple-macosx13.0"
+SCRATCH="$ROOT/.build/$TARGET_ARCH"
+APP_BINARY="$SCRATCH/$TARGET_ARCH-apple-macosx/release/TrafficLightsPlus"
 
 cd "$ROOT"
 export CLANG_MODULE_CACHE_PATH="$ROOT/.build/ModuleCache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$ROOT/.build/ModuleCache"
 swift build -c release \
-    --triple arm64-apple-macosx13.0 \
-    --scratch-path "$ROOT/.build/arm64" \
+    --triple "$TRIPLE" \
+    --scratch-path "$SCRATCH" \
     --disable-sandbox \
     --cache-path "$ROOT/.build/SwiftPMCache"
+
+lipo "$APP_BINARY" -verify_arch "$TARGET_ARCH"
 
 rm -rf "$ICONSET"
 mkdir -p "$ICONSET" "$ROOT/Resources"

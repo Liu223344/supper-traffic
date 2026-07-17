@@ -28,8 +28,20 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
 
 @Test func recommendedHiddenTrafficLightCopyIsStable() {
     #expect(SettingsView.hiddenTrafficLightsTitle == "隐藏式红绿灯（推荐）")
+    #expect(SettingsView.fullScreenOptionTitle == "在全屏窗口中显示（开发中）")
     #expect(HiddenTrafficLightRevealMode.group.title == "整组")
     #expect(HiddenTrafficLightRevealMode.nearest.title == "单个（推荐）")
+}
+
+@Test func fullScreenPreferenceIsDisabledWhileTheFeatureIsInDevelopment() {
+    withDefaults { defaults in
+        defaults.set(true, forKey: "showInFullScreen")
+
+        let preferences = Preferences(defaults: defaults)
+
+        #expect(!preferences.showInFullScreen)
+        #expect(!defaults.bool(forKey: "showInFullScreen"))
+    }
 }
 
 @Test func preferencesPersist() {
@@ -41,7 +53,6 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         preferences.style = .edgeSquares
         preferences.hiddenTrafficLightsEnabled = false
         preferences.hiddenTrafficLightRevealMode = .group
-        preferences.showInFullScreen = true
         preferences.closeBehavior = .quitApplication
         preferences.minimizeBehavior = .hideApplication
         preferences.zoomBehavior = .doNothing
@@ -57,7 +68,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(restored.style == .edgeSquares)
         #expect(!restored.hiddenTrafficLightsEnabled)
         #expect(restored.hiddenTrafficLightRevealMode == .group)
-        #expect(restored.showInFullScreen)
+        #expect(!restored.showInFullScreen)
         #expect(restored.closeBehavior == .quitApplication)
         #expect(restored.minimizeBehavior == .hideApplication)
         #expect(restored.zoomBehavior == .doNothing)

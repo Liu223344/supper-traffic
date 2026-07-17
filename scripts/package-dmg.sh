@@ -2,23 +2,26 @@
 set -euo pipefail
 
 ROOT="${0:A:h:h}"
-APP="$ROOT/build/Traffic Lights Plus.app"
-STAGE="$ROOT/.build/dmg-root"
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Info.plist")
-DMG="$ROOT/build/Traffic-Lights-Plus-$VERSION.dmg"
 
-"$ROOT/scripts/build-app.sh"
+for ARCH in arm64 x86_64; do
+    APP="$ROOT/.build/package-$ARCH/Traffic Lights Plus.app"
+    STAGE="$ROOT/.build/dmg-root-$ARCH"
+    DMG="$ROOT/build/Traffic-Lights-Plus-$VERSION-$ARCH.dmg"
 
-rm -rf "$STAGE"
-mkdir -p "$STAGE"
-ditto "$APP" "$STAGE/Traffic Lights Plus.app"
-ln -s /Applications "$STAGE/Applications"
+    TARGET_ARCH="$ARCH" APP_OUTPUT="$APP" "$ROOT/scripts/build-app.sh"
 
-hdiutil create \
-    -volname "Traffic Lights+" \
-    -srcfolder "$STAGE" \
-    -format UDZO \
-    -ov \
-    "$DMG"
+    rm -rf "$STAGE"
+    mkdir -p "$STAGE"
+    ditto "$APP" "$STAGE/Traffic Lights Plus.app"
+    ln -s /Applications "$STAGE/Applications"
 
-echo "$DMG"
+    hdiutil create \
+        -volname "Traffic Lights+ ($ARCH)" \
+        -srcfolder "$STAGE" \
+        -format UDZO \
+        -ov \
+        "$DMG"
+
+    echo "$DMG"
+done

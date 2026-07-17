@@ -9,10 +9,12 @@ Traffic Lights+ 是一个原生 macOS 菜单栏工具，可以把其他应用窗
 
 ## 下载
 
-从 [Releases](https://github.com/Liu223344/supper-traffic/releases/latest) 下载最新版：
+从 [Releases](https://github.com/Liu223344/traffic-light-plus/releases/latest) 下载最新版：
 
-- `Traffic-Lights-Plus-1.1.0.dmg`：推荐，打开后拖入“应用程序”。
-- `Traffic-Lights-Plus-1.1.0.zip`：解压后直接获得应用。
+- `Traffic-Lights-Plus-<版本>-arm64.dmg`：Apple Silicon Mac，推荐。
+- `Traffic-Lights-Plus-<版本>-x86_64.dmg`：Intel Mac，推荐。
+- `Traffic-Lights-Plus-<版本>-arm64.zip`：Apple Silicon Mac 的免 DMG 压缩包。
+- `Traffic-Lights-Plus-<版本>-x86_64.zip`：Intel Mac 的免 DMG 压缩包。
 - `SHA256SUMS.txt`：用于校验下载文件。
 
 当前公开构建使用 ad-hoc 签名，尚未经过 Apple 公证。macOS 首次阻止启动时，请在 Finder 中右键应用并选择“打开”。
@@ -22,17 +24,18 @@ Traffic Lights+ 是一个原生 macOS 菜单栏工具，可以把其他应用窗
 - 红绿灯尺寸可在 `18-48 pt` 范围内调整。
 - 圆形按钮支持自定义间距，也可切换为左上角贴边方块。
 - “隐藏式红绿灯”支持靠近时放大“整组”或仅放大“单个”最近按钮。
+- 在当前活跃窗口中悬停配置为“缩放窗口”的放大按钮，可打开 macOS 原生缩放与平铺菜单。
 - 窗口拖动期间以 120 Hz 同步位置，并实时处理按钮级遮挡。
 - 最小化前快速缩小并隐藏覆盖按钮，避免覆盖层留在系统动画中。
 - 可分别把红、黄、绿按钮设置为关闭窗口、退出应用、最小化、缩放、隐藏应用或无操作。
-- 支持所有可见窗口、多显示器和可选的全屏窗口显示。
+- 支持所有可见普通窗口和多显示器；全屏窗口支持仍在开发中。
 - 设置即时生效并通过 `UserDefaults` 保存在本机。
 - 无网络请求、无分析统计、无广告和账号系统。
 
 ## 系统要求
 
 - macOS 13 Ventura 或更高版本。
-- Apple Silicon Mac（当前发布脚本生成 arm64 应用）。
+- Apple Silicon 或 Intel Mac，请下载与芯片架构对应的发布文件。
 - 目标应用需要提供标准 macOS 辅助功能窗口按钮。
 
 ## 安装与权限
@@ -51,7 +54,7 @@ Traffic Lights+ 启动后常驻菜单栏。设置页可以调整：
 - 总开关、尺寸、外观和圆形按钮间距；
 - 隐藏式红绿灯及“整组/单个”放大方式；
 - 红、黄、绿三个按钮各自的操作；
-- 是否在全屏窗口上显示覆盖按钮。
+- “在全屏窗口中显示（开发中）”当前不可勾选。
 
 隐藏模式开启时，将鼠标移到窗口左上角红绿灯区域即可显示放大按钮。单个模式会选择距离鼠标最近的可见按钮，按钮被其他窗口遮挡时不会显示或参与选择。
 
@@ -60,7 +63,6 @@ Traffic Lights+ 启动后常驻菜单栏。设置页可以调整：
 - 使用自行绘制标题栏、未暴露标准 AX 按钮的应用可能无法使用。
 - 覆盖按钮属于独立的非激活面板，无法真正加入其他应用的窗口合成树。
 - 当前公开构建未公证，因此首次启动可能出现 Gatekeeper 提示。
-- Intel Mac 尚未提供预编译版本；可自行调整构建目标尝试编译。
 
 ## 从源码构建
 
@@ -74,12 +76,21 @@ swift test
 open "build/Traffic Lights Plus.app"
 ```
 
-生成发布文件：
+`build-app.sh` 默认构建当前 Mac 的原生架构，也可以显式指定：
+
+```sh
+TARGET_ARCH=arm64 ./scripts/build-app.sh
+TARGET_ARCH=x86_64 ./scripts/build-app.sh
+```
+
+生成两种架构的独立发布文件：
 
 ```sh
 ./scripts/package-dmg.sh
 ./scripts/package-zip.sh
 ```
+
+产物分别带有 `-arm64` 和 `-x86_64` 后缀。发布打包使用独立临时应用，不会覆盖 `build/Traffic Lights Plus.app` 中的本机开发构建。
 
 默认使用 ad-hoc 签名。持有 Developer ID 的发布者可以设置：
 

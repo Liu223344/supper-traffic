@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     static let hiddenTrafficLightsTitle = "隐藏式红绿灯（推荐）"
+    static let fullScreenOptionTitle = "在全屏窗口中显示（开发中）"
 
     @ObservedObject var preferences: Preferences
     @State private var accessibilityGranted = AXIsProcessTrusted()
@@ -186,7 +187,8 @@ struct SettingsView: View {
                 .labelsHidden()
             }
 
-            Toggle("在全屏窗口中显示", isOn: $preferences.showInFullScreen)
+            Toggle(Self.fullScreenOptionTitle, isOn: .constant(false))
+                .disabled(true)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {

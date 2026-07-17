@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.2.0 - 2026-07-17
+
+- Added native Intel (`x86_64`) builds while retaining Apple Silicon (`arm64`) support.
+- Added architecture-specific DMG and ZIP release artifacts.
+- Added native CI coverage for both Apple Silicon and Intel macOS runners.
+- Added the native macOS zoom and tiling menu when hovering an enlarged zoom control in the active window.
+- Fixed green-button clicks being ignored when the native zoom menu had just been requested.
+- Marked full-screen overlay support as in development and disabled its settings toggle.
+
 ## 1.1.0 - 2026-07-16
 
 - Reworked tracking to cover all visible application windows instead of only the frontmost window.

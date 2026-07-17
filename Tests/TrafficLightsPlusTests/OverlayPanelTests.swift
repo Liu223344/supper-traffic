@@ -44,6 +44,68 @@ import Testing
     #expect(!panel.overlayView.isPointerHighlightVisible)
 }
 
+@Test func zoomMenuEligibilityRequiresZoomBehaviorAndActiveSupportedControl() {
+    #expect(WindowOverlay.zoomMenuHoverDelay == 0.5)
+    #expect(WindowOverlay.shouldOfferZoomMenu(
+        behavior: .zoomWindow,
+        isActiveWindow: true,
+        isControlEnabled: true,
+        supportsShowMenu: true
+    ))
+    #expect(!WindowOverlay.shouldOfferZoomMenu(
+        behavior: .closeWindow,
+        isActiveWindow: true,
+        isControlEnabled: true,
+        supportsShowMenu: true
+    ))
+    #expect(!WindowOverlay.shouldOfferZoomMenu(
+        behavior: .zoomWindow,
+        isActiveWindow: false,
+        isControlEnabled: true,
+        supportsShowMenu: true
+    ))
+    #expect(!WindowOverlay.shouldOfferZoomMenu(
+        behavior: .zoomWindow,
+        isActiveWindow: true,
+        isControlEnabled: false,
+        supportsShowMenu: true
+    ))
+    #expect(!WindowOverlay.shouldOfferZoomMenu(
+        behavior: .zoomWindow,
+        isActiveWindow: true,
+        isControlEnabled: true,
+        supportsShowMenu: false
+    ))
+}
+
+@Test func zoomClickWaitsOnlyForARecentlyTriggeredHoverMenu() {
+    #expect(WindowOverlay.zoomActionDelay(menuTriggeredAt: nil, now: 10) == 0)
+    #expect(WindowOverlay.zoomActionDelay(menuTriggeredAt: 10, now: 10.5) == 0.12)
+    #expect(WindowOverlay.zoomActionDelay(menuTriggeredAt: 10, now: 11.01) == 0)
+    #expect(WindowOverlay.zoomActionDelay(menuTriggeredAt: 11, now: 10) == 0)
+}
+
+@MainActor
+@Test func overlayPressHandlerRunsOnMouseDown() throws {
+    let panel = OverlayPanel(action: .zoom)
+    var pressedAction: WindowAction?
+    panel.overlayView.pressHandler = { pressedAction = $0 }
+    let event = try #require(NSEvent.mouseEvent(
+        with: .leftMouseDown,
+        location: .zero,
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        eventNumber: 0,
+        clickCount: 1,
+        pressure: 1
+    ))
+
+    panel.overlayView.mouseDown(with: event)
+    #expect(pressedAction == .zoom)
+}
+
 @Test func symbolRectUsesAnimatedBoundsInsteadOfConfiguredControlSize() throws {
     let compactBounds = NSRect(x: 0, y: 0, width: 14, height: 14)
     let symbolRect = try #require(OverlayButtonView.symbolRect(in: compactBounds, style: .macOS))

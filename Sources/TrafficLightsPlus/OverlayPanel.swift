@@ -22,6 +22,7 @@ final class OverlayButtonView: NSView {
     var isGroupHovered = false { didSet { needsDisplay = true } }
     var actionHandler: ((WindowAction) -> Void)?
     var hoverHandler: ((Bool) -> Void)?
+    var pressHandler: ((WindowAction) -> Void)?
 
     var isColorVisible: Bool { isWindowActive || isGroupHovered || isHovered || isPressed }
     var isPointerHighlightVisible: Bool { isGroupHovered || isHovered || isPressed }
@@ -82,6 +83,7 @@ final class OverlayButtonView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        pressHandler?(action)
         guard isControlEnabled else { NSSound.beep(); return }
         isPressed = true
         needsDisplay = true

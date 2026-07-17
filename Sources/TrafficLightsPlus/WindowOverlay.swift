@@ -27,6 +27,9 @@ enum OverlayPresentationState {
 final class WindowOverlay {
     static let minimizeActionDelay = 1.0 / 120.0
     static let minimizeDismissDuration = 0.045
+    static let zoomMenuHoverDelay = 0.5
+    static let zoomMenuClickRecoveryDelay = 0.12
+    static let zoomMenuClickRecoveryWindow = 1.0
     private static let revealDuration = 0.10
 
     let key: AXWindowKey
@@ -45,10 +48,18 @@ final class WindowOverlay {
     private var availableActions = Set<WindowAction>()
     private var visibleActions = Set<WindowAction>()
     private var configuredBehaviors: [WindowAction: ButtonBehavior] = [:]
+    private var isActiveWindowForZoomMenu = false
     private(set) var isSuppressed = false
     private var isEligibleForDisplay = true
     private var lastDiagnostic = ""
     private var hoverResetWorkItem: DispatchWorkItem?
+    private var zoomMenuWorkItem: DispatchWorkItem?
+    private var hoveredZoomMenuAction: WindowAction?
+    private var zoomMenuTriggeredAt: TimeInterval?
+    private lazy var zoomAccessibilityQueue = DispatchQueue(
+        label: "app.trafficlightsplus.mac.zoom-accessibility.\(key.pid)",
+        qos: .userInitiated
+    )
     private var minimizeRequestGeneration = 0
     private var isMinimizeDismissalInProgress = false
     private var minimizeDismissalStartFrames: [WindowAction: NSRect] = [:]
@@ -67,9 +78,12 @@ final class WindowOverlay {
         self.key = key
         window = key.element
         panels = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { ($0, OverlayPanel(action: $0)) })
-        for panel in panels.values {
+        for (action, panel) in panels {
             panel.overlayView.actionHandler = { [weak self] action in self?.perform(action) }
-            panel.overlayView.hoverHandler = { [weak self] hovered in self?.setGroupHovered(hovered) }
+            panel.overlayView.pressHandler = { [weak self] _ in self?.cancelZoomMenuRequest() }
+            panel.overlayView.hoverHandler = { [weak self] hovered in
+                self?.handleHover(for: action, hovered: hovered)
+            }
         }
     }
 
@@ -102,12 +116,18 @@ final class WindowOverlay {
         let windowIsFocused: Bool = copyAttribute(kAXFocusedAttribute as CFString, from: window) ?? false
         let windowIsMain: Bool = copyAttribute(kAXMainAttribute as CFString, from: window) ?? false
         let isActiveWindow = appIsActive && (windowIsFocused || windowIsMain)
+        isActiveWindowForZoomMenu = isActiveWindow
+        if !isActiveWindow { cancelZoomMenuRequest(clearTriggeredState: true) }
         configuredBehaviors = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map {
             ($0, preferences.effectiveBehavior(
                 for: $0,
                 bundleIdentifier: application?.bundleIdentifier
             ))
         })
+        if let hoveredZoomMenuAction,
+           configuredBehaviors[hoveredZoomMenuAction] != .zoomWindow {
+            cancelZoomMenuRequest(clearTriggeredState: true)
+        }
         let controlSize = ControlLayout.effectiveSize(preferred: preferences.size)
         var buttons: [WindowAction: AXUIElement] = [:]
         var frames: [WindowAction: CGRect] = [:]
@@ -159,6 +179,7 @@ final class WindowOverlay {
         report("pid=\(key.pid) controls=\(buttons.count)")
 
         targetButtons = buttons
+        if targetButtons[.zoom] == nil { cancelZoomMenuRequest(clearTriggeredState: true) }
         preparedCGFrames.removeAll(keepingCapacity: true)
         preparedActions.removeAll(keepingCapacity: true)
         for action in WindowAction.allCases {
@@ -329,6 +350,10 @@ final class WindowOverlay {
 
         visibleActions = nextVisibleActions
         interactiveActions = desiredActions.intersection(nextVisibleActions)
+        if let hoveredZoomMenuAction,
+           !interactiveActions.contains(hoveredZoomMenuAction) {
+            cancelZoomMenuRequest(clearTriggeredState: true)
+        }
         if desiredActions != lastDesiredActions {
             for action in ControlLayout.displayOrder(for: .macOS) where interactiveActions.contains(action) {
                 panels[action]?.orderFrontRegardless()
@@ -338,6 +363,7 @@ final class WindowOverlay {
         if visibleActions.isEmpty {
             hoverResetWorkItem?.cancel()
             hoverResetWorkItem = nil
+            cancelZoomMenuRequest(clearTriggeredState: true)
         } else {
             setGroupHovered(pointerInsideButton)
         }
@@ -477,6 +503,7 @@ final class WindowOverlay {
     private func hidePanels() {
         hoverResetWorkItem?.cancel()
         hoverResetWorkItem = nil
+        cancelZoomMenuRequest(clearTriggeredState: true)
         visibleActions.removeAll(keepingCapacity: true)
         interactiveActions.removeAll(keepingCapacity: true)
         lastDesiredActions.removeAll(keepingCapacity: true)
@@ -510,13 +537,106 @@ final class WindowOverlay {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
     }
 
+    private func handleHover(for action: WindowAction, hovered: Bool) {
+        setGroupHovered(hovered)
+        if hovered {
+            scheduleZoomMenu(for: action)
+        } else if hoveredZoomMenuAction == action {
+            cancelZoomMenuRequest()
+        }
+    }
+
+    private func scheduleZoomMenu(for action: WindowAction) {
+        cancelZoomMenuRequest(clearTriggeredState: true)
+        guard interactiveActions.contains(action),
+              let panel = panels[action],
+              let zoomButton = targetButtons[.zoom] else { return }
+
+        let supportsShowMenu = supportsAccessibilityAction(kAXShowMenuAction as CFString, on: zoomButton)
+        guard Self.shouldOfferZoomMenu(
+            behavior: configuredBehaviors[action] ?? ButtonBehavior.defaultBehavior(for: action),
+            isActiveWindow: isActiveWindowForZoomMenu,
+            isControlEnabled: panel.overlayView.isControlEnabled,
+            supportsShowMenu: supportsShowMenu
+        ) else { return }
+
+        hoveredZoomMenuAction = action
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.hoveredZoomMenuAction == action,
+                  self.interactiveActions.contains(action),
+                  let panel = self.panels[action],
+                  let zoomButton = self.targetButtons[.zoom] else { return }
+
+            let supportsShowMenu = self.supportsAccessibilityAction(
+                kAXShowMenuAction as CFString,
+                on: zoomButton
+            )
+            guard Self.shouldOfferZoomMenu(
+                behavior: self.configuredBehaviors[action] ?? ButtonBehavior.defaultBehavior(for: action),
+                isActiveWindow: self.targetWindowIsActive(),
+                isControlEnabled: panel.overlayView.isControlEnabled,
+                supportsShowMenu: supportsShowMenu
+            ) else {
+                self.cancelZoomMenuRequest()
+                return
+            }
+
+            self.zoomMenuWorkItem = nil
+            self.zoomMenuTriggeredAt = ProcessInfo.processInfo.systemUptime
+            let actionQueue = self.zoomAccessibilityQueue
+            actionQueue.async {
+                _ = AXUIElementPerformAction(zoomButton, kAXShowMenuAction as CFString)
+            }
+        }
+        zoomMenuWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.zoomMenuHoverDelay, execute: workItem)
+    }
+
+    private func cancelZoomMenuRequest(clearTriggeredState: Bool = false) {
+        zoomMenuWorkItem?.cancel()
+        zoomMenuWorkItem = nil
+        hoveredZoomMenuAction = nil
+        if clearTriggeredState { zoomMenuTriggeredAt = nil }
+    }
+
+    static func shouldOfferZoomMenu(
+        behavior: ButtonBehavior,
+        isActiveWindow: Bool,
+        isControlEnabled: Bool,
+        supportsShowMenu: Bool
+    ) -> Bool {
+        behavior == .zoomWindow && isActiveWindow && isControlEnabled && supportsShowMenu
+    }
+
+    static func zoomActionDelay(
+        menuTriggeredAt: TimeInterval?,
+        now: TimeInterval
+    ) -> TimeInterval {
+        guard let menuTriggeredAt,
+              now >= menuTriggeredAt,
+              now - menuTriggeredAt <= zoomMenuClickRecoveryWindow else { return 0 }
+        return zoomMenuClickRecoveryDelay
+    }
+
     private func perform(_ action: WindowAction) {
         let behavior = configuredBehaviors[action] ?? ButtonBehavior.defaultBehavior(for: action)
+        let zoomActionDelay = behavior == .zoomWindow
+            ? Self.zoomActionDelay(
+                menuTriggeredAt: zoomMenuTriggeredAt,
+                now: ProcessInfo.processInfo.systemUptime
+            )
+            : 0
+        cancelZoomMenuRequest(clearTriggeredState: true)
 
         if let nativeAction = behavior.nativeWindowAction {
             guard let button = targetButtons[nativeAction] else { NSSound.beep(); return }
             if behavior == .minimizeWindow {
                 performMinimize(using: button)
+                return
+            }
+            if behavior == .zoomWindow {
+                performZoom(using: button, delay: zoomActionDelay)
                 return
             }
             if AXUIElementPerformAction(button, kAXPressAction as CFString) != .success {
@@ -538,6 +658,14 @@ final class WindowOverlay {
             break
         case .closeWindow, .minimizeWindow, .zoomWindow:
             break
+        }
+    }
+
+    private func performZoom(using button: AXUIElement, delay: TimeInterval) {
+        zoomAccessibilityQueue.asyncAfter(deadline: .now() + delay) {
+            let result = AXUIElementPerformAction(button, kAXPressAction as CFString)
+            guard result != .success else { return }
+            DispatchQueue.main.async { NSSound.beep() }
         }
     }
 
@@ -653,6 +781,20 @@ final class WindowOverlay {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
         return value as? T
+    }
+
+    private func supportsAccessibilityAction(_ action: CFString, on element: AXUIElement) -> Bool {
+        var actions: CFArray?
+        guard AXUIElementCopyActionNames(element, &actions) == .success,
+              let actionNames = actions as? [String] else { return false }
+        return actionNames.contains(action as String)
+    }
+
+    private func targetWindowIsActive() -> Bool {
+        let appIsActive = NSRunningApplication(processIdentifier: key.pid)?.isActive ?? false
+        let windowIsFocused: Bool = copyAttribute(kAXFocusedAttribute as CFString, from: window) ?? false
+        let windowIsMain: Bool = copyAttribute(kAXMainAttribute as CFString, from: window) ?? false
+        return appIsActive && (windowIsFocused || windowIsMain)
     }
 
     private func report(_ diagnostic: String) {

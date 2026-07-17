@@ -6,12 +6,25 @@ on:
 
 jobs:
   test:
-    runs-on: macos-15
+    name: Test (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Test
         run: swift test
       - name: Build release app
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
         run: ./scripts/build-app.sh
+      - name: Verify architecture
+        run: lipo "build/Traffic Lights Plus.app/Contents/MacOS/TrafficLightsPlus" -verify_arch "${{ matrix.arch }}"
       - name: Verify signature
         run: codesign --verify --deep --strict "build/Traffic Lights Plus.app"

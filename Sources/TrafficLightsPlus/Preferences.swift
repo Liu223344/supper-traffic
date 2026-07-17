@@ -72,9 +72,7 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(hiddenTrafficLightRevealMode.rawValue, forKey: Key.hiddenTrafficLightRevealMode) }
     }
 
-    @Published var showInFullScreen: Bool {
-        didSet { defaults.set(showInFullScreen, forKey: Key.showInFullScreen) }
-    }
+    @Published private(set) var showInFullScreen: Bool
 
     @Published var closeBehavior: ButtonBehavior {
         didSet { defaults.set(closeBehavior.rawValue, forKey: Key.closeBehavior) }
@@ -120,7 +118,8 @@ final class Preferences: ObservableObject {
         hiddenTrafficLightRevealMode = HiddenTrafficLightRevealMode(
             rawValue: defaults.string(forKey: Key.hiddenTrafficLightRevealMode) ?? ""
         ) ?? .nearest
-        showInFullScreen = defaults.bool(forKey: Key.showInFullScreen)
+        showInFullScreen = false
+        defaults.set(false, forKey: Key.showInFullScreen)
         closeBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.closeBehavior) ?? "") ?? .closeWindow
         minimizeBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.minimizeBehavior) ?? "") ?? .minimizeWindow
         zoomBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.zoomBehavior) ?? "") ?? .zoomWindow
