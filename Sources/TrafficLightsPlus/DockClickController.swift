@@ -70,9 +70,10 @@ final class DockClickController {
     static func shouldTrackClick(
         featureEnabled: Bool,
         clickedBundleIdentifier: String?,
-        frontmostBundleIdentifier: String?
+        frontmostBundleIdentifier: String?,
+        hasUnminimizedWindow: Bool
     ) -> Bool {
-        guard featureEnabled,
+        guard featureEnabled, hasUnminimizedWindow,
               let clickedBundleIdentifier,
               let frontmostBundleIdentifier else { return false }
         return clickedBundleIdentifier.caseInsensitiveCompare(frontmostBundleIdentifier) == .orderedSame
@@ -91,10 +92,14 @@ final class DockClickController {
         case .leftMouseDown:
             let clickedBundleIdentifier = dockApplicationBundleIdentifier(at: location)
             let frontmostApplication = NSWorkspace.shared.frontmostApplication
+            let hasUnminimizedWindow = frontmostApplication.map {
+                hasUnminimizedFocusedWindow(pid: $0.processIdentifier)
+            } ?? false
             guard Self.shouldTrackClick(
                 featureEnabled: featureEnabled,
                 clickedBundleIdentifier: clickedBundleIdentifier,
-                frontmostBundleIdentifier: frontmostApplication?.bundleIdentifier
+                frontmostBundleIdentifier: frontmostApplication?.bundleIdentifier,
+                hasUnminimizedWindow: hasUnminimizedWindow
             ), let clickedBundleIdentifier, let frontmostApplication else {
                 candidate = nil
                 return
@@ -173,6 +178,15 @@ final class DockClickController {
               subrole == "AXApplicationDockItem",
               let url: URL = copyAttribute("AXURL" as CFString, from: element) else { return nil }
         return Bundle(url: url)?.bundleIdentifier
+    }
+
+    private func hasUnminimizedFocusedWindow(pid: pid_t) -> Bool {
+        let application = AXUIElementCreateApplication(pid)
+        let focusedWindow: AXUIElement? = copyAttribute(kAXFocusedWindowAttribute as CFString, from: application)
+        let mainWindow: AXUIElement? = copyAttribute(kAXMainWindowAttribute as CFString, from: application)
+        guard let window = focusedWindow ?? mainWindow else { return false }
+        let minimized: Bool = copyAttribute(kAXMinimizedAttribute as CFString, from: window) ?? false
+        return !minimized
     }
 
     private func copyAttribute<T>(_ attribute: CFString, from element: AXUIElement) -> T? {

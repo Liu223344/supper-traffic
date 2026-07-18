@@ -6,17 +6,26 @@ import Testing
     #expect(DockClickController.shouldTrackClick(
         featureEnabled: true,
         clickedBundleIdentifier: "com.example.Editor",
-        frontmostBundleIdentifier: "COM.EXAMPLE.EDITOR"
+        frontmostBundleIdentifier: "COM.EXAMPLE.EDITOR",
+        hasUnminimizedWindow: true
     ))
     #expect(!DockClickController.shouldTrackClick(
         featureEnabled: true,
         clickedBundleIdentifier: "com.example.Editor",
-        frontmostBundleIdentifier: "com.example.Browser"
+        frontmostBundleIdentifier: "com.example.Browser",
+        hasUnminimizedWindow: true
     ))
     #expect(!DockClickController.shouldTrackClick(
         featureEnabled: false,
         clickedBundleIdentifier: "com.example.Editor",
-        frontmostBundleIdentifier: "com.example.Editor"
+        frontmostBundleIdentifier: "com.example.Editor",
+        hasUnminimizedWindow: true
+    ))
+    #expect(!DockClickController.shouldTrackClick(
+        featureEnabled: true,
+        clickedBundleIdentifier: "com.example.Editor",
+        frontmostBundleIdentifier: "com.example.Editor",
+        hasUnminimizedWindow: false
     ))
 }
 
