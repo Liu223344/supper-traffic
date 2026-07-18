@@ -96,10 +96,7 @@ final class WindowOverlay {
         }
 
         let minimized: Bool = copyAttribute(kAXMinimizedAttribute as CFString, from: window) ?? false
-        if minimized {
-            suppressUntilRestored()
-            return false
-        }
+        guard reconcileMinimizedState(minimized) else { return false }
         let fullScreen: Bool = copyAttribute("AXFullScreen" as CFString, from: window) ?? false
         guard preferences.showInFullScreen || !fullScreen else {
             isEligibleForDisplay = false
@@ -486,6 +483,16 @@ final class WindowOverlay {
         isSuppressed = true
         isEligibleForDisplay = false
         hide()
+    }
+
+    @discardableResult
+    func reconcileMinimizedState(_ minimized: Bool) -> Bool {
+        if minimized {
+            if !isSuppressed { suppressUntilRestored() }
+            return false
+        }
+        if isSuppressed { restoreFromSuppression() }
+        return true
     }
 
     func restoreFromSuppression() {

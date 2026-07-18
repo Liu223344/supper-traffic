@@ -30,6 +30,22 @@ import Testing
 }
 
 @MainActor
+@Test func periodicWindowStateRecoversFromMissedDeminiaturizeNotification() {
+    let pid = ProcessInfo.processInfo.processIdentifier
+    let key = AXWindowKey(pid: pid, element: AXUIElementCreateApplication(pid))
+    let overlay = WindowOverlay(key: key)
+
+    #expect(!overlay.reconcileMinimizedState(true))
+    #expect(overlay.isSuppressed)
+
+    // Stage Manager does not consistently deliver AXWindowDeminiaturized.
+    // The next periodic AX state refresh must still restore the overlay.
+    #expect(overlay.reconcileMinimizedState(false))
+    #expect(!overlay.isSuppressed)
+    #expect(overlay.presentationState == .hidden)
+}
+
+@MainActor
 @Test func overlayColorVisibilityFollowsActivationAndHover() {
     let panel = OverlayPanel(action: .close)
 
