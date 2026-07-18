@@ -31,6 +31,7 @@ Traffic Lights+ 是一个原生 macOS 菜单栏工具，可以把其他应用窗
 - 在当前活跃窗口中悬停配置为“缩放窗口”的放大按钮，可打开 macOS 原生缩放与平铺菜单。
 - 窗口拖动期间以 120 Hz 同步位置，并实时处理按钮级遮挡。
 - 最小化前快速缩小并隐藏覆盖按钮，避免覆盖层留在系统动画中。
+- 再次点击当前前台应用的 Dock 图标时，可最小化该应用的当前窗口。
 - 可分别把红、黄、绿按钮设置为关闭窗口、退出应用、最小化、缩放、隐藏应用或无操作。
 - 支持所有可见普通窗口和多显示器；全屏窗口支持仍在开发中。
 - 设置即时生效并通过 `UserDefaults` 保存在本机。
@@ -59,6 +60,7 @@ Traffic Lights+ 启动后常驻菜单栏。设置页可以调整：
 - 隐藏式红绿灯及“整组/单个”放大方式；
 - 红、黄、绿三个按钮各自的操作；
 - “在全屏窗口中显示（开发中）”当前不可勾选。
+- 再次点击 Dock 应用图标时最小化当前窗口。
 
 隐藏模式开启时，将鼠标移到窗口左上角红绿灯区域即可显示放大按钮。单个模式会选择距离鼠标最近的可见按钮，按钮被其他窗口遮挡时不会显示或参与选择。
 
@@ -146,6 +148,7 @@ Public builds currently use ad-hoc code signing and are not notarized by Apple. 
 - Hover over an enlarged control configured to zoom the active window to open the native macOS zoom and tiling menu.
 - Window positions are synchronized at 120 Hz while dragging, with real-time per-control occlusion handling.
 - Overlay controls quickly shrink and disappear before minimization to avoid remaining visible during the system animation.
+- Click the current frontmost application's Dock icon again to minimize its active window.
 - Configure the red, yellow, and green controls independently to close a window, quit an app, minimize, zoom, hide an app, or do nothing.
 - Supports all visible standard windows and multiple displays. Full-screen window support is still in development.
 - Settings take effect immediately and are stored locally with `UserDefaults`.
@@ -174,6 +177,7 @@ Traffic Lights+ remains available in the menu bar after launch. Its settings inc
 - hidden traffic lights and group/single reveal modes;
 - independent actions for the red, yellow, and green controls;
 - a disabled **Show in full-screen windows (In development)** option.
+- minimizing the active window when its Dock application icon is clicked again.
 
 When hidden mode is enabled, move the pointer into the traffic-light area in the top-left corner of a window to reveal the enlarged controls. Single mode selects the nearest visible control. Controls covered by another window are neither displayed nor included in selection.
 

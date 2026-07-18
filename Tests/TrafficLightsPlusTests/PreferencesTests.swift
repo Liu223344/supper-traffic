@@ -19,6 +19,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(preferences.hiddenTrafficLightsEnabled)
         #expect(preferences.hiddenTrafficLightRevealMode == .nearest)
         #expect(!preferences.showInFullScreen)
+        #expect(preferences.dockClickMinimizesActiveWindow)
         #expect(preferences.closeBehavior == .closeWindow)
         #expect(preferences.minimizeBehavior == .minimizeWindow)
         #expect(preferences.zoomBehavior == .zoomWindow)
@@ -29,6 +30,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
 @Test func recommendedHiddenTrafficLightCopyIsStable() {
     #expect(SettingsView.hiddenTrafficLightsTitle == "隐藏式红绿灯（推荐）")
     #expect(SettingsView.fullScreenOptionTitle == "在全屏窗口中显示（开发中）")
+    #expect(SettingsView.dockClickMinimizeTitle == "再次点击 Dock 应用图标时最小化当前窗口")
     #expect(HiddenTrafficLightRevealMode.group.title == "整组")
     #expect(HiddenTrafficLightRevealMode.nearest.title == "单个（推荐）")
 }
@@ -53,6 +55,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         preferences.style = .edgeSquares
         preferences.hiddenTrafficLightsEnabled = false
         preferences.hiddenTrafficLightRevealMode = .group
+        preferences.dockClickMinimizesActiveWindow = false
         preferences.closeBehavior = .quitApplication
         preferences.minimizeBehavior = .hideApplication
         preferences.zoomBehavior = .doNothing
@@ -69,6 +72,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(!restored.hiddenTrafficLightsEnabled)
         #expect(restored.hiddenTrafficLightRevealMode == .group)
         #expect(!restored.showInFullScreen)
+        #expect(!restored.dockClickMinimizesActiveWindow)
         #expect(restored.closeBehavior == .quitApplication)
         #expect(restored.minimizeBehavior == .hideApplication)
         #expect(restored.zoomBehavior == .doNothing)

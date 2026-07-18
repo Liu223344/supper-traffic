@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     static let hiddenTrafficLightsTitle = "隐藏式红绿灯（推荐）"
     static let fullScreenOptionTitle = "在全屏窗口中显示（开发中）"
+    static let dockClickMinimizeTitle = "再次点击 Dock 应用图标时最小化当前窗口"
 
     @ObservedObject var preferences: Preferences
     @State private var accessibilityGranted = AXIsProcessTrusted()
@@ -189,6 +190,8 @@ struct SettingsView: View {
 
             Toggle(Self.fullScreenOptionTitle, isOn: .constant(false))
                 .disabled(true)
+
+            Toggle(Self.dockClickMinimizeTitle, isOn: $preferences.dockClickMinimizesActiveWindow)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {

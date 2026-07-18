@@ -174,6 +174,42 @@ final class WindowTracker {
         }
     }
 
+    @discardableResult
+    func minimizeFocusedWindow(of pid: pid_t) -> Bool {
+        let application = AXUIElementCreateApplication(pid)
+        let focusedWindow: AXUIElement? = copyAttribute(kAXFocusedWindowAttribute as CFString, from: application)
+        let mainWindow: AXUIElement? = copyAttribute(kAXMainWindowAttribute as CFString, from: application)
+        guard let window = focusedWindow ?? mainWindow else { return false }
+        let minimized: Bool = copyAttribute(kAXMinimizedAttribute as CFString, from: window) ?? false
+        guard !minimized else { return false }
+
+        let key = AXWindowKey(pid: pid, element: window)
+        if let overlay = overlays[key], overlay.minimizeWindow() { return true }
+
+        if let button: AXUIElement = copyAttribute(kAXMinimizeButtonAttribute as CFString, from: window),
+           copyAttribute(kAXEnabledAttribute as CFString, from: button) ?? true {
+            DispatchQueue.global(qos: .userInitiated).async {
+                _ = AXUIElementPerformAction(button, kAXPressAction as CFString)
+            }
+            return true
+        }
+
+        var settable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(
+            window,
+            kAXMinimizedAttribute as CFString,
+            &settable
+        ) == .success, settable.boolValue else { return false }
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = AXUIElementSetAttributeValue(
+                window,
+                kAXMinimizedAttribute as CFString,
+                kCFBooleanTrue
+            )
+        }
+        return true
+    }
+
     private func ensureObservedApplication(pid: pid_t, element: AXUIElement) {
         guard applications[pid] == nil else { return }
         var observerRef: AXObserver?

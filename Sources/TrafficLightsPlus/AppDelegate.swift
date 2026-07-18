@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger = Logger(subsystem: "app.trafficlightsplus.mac", category: "lifecycle")
     private let preferences = Preferences()
     private var tracker: WindowTracker?
+    private var dockClickController: DockClickController?
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
 
@@ -15,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logger.notice("Application finished launching")
         NSApp.setActivationPolicy(.accessory)
         tracker = WindowTracker(preferences: preferences)
+        dockClickController = DockClickController(preferences: preferences) { [weak self] pid in
+            self?.minimizeWindowFromDock(pid: pid) ?? false
+        }
         configureStatusItem()
         DispatchQueue.main.async { [weak self] in self?.showSettings() }
 
@@ -85,6 +89,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    private func minimizeWindowFromDock(pid: pid_t) -> Bool {
+        if pid == ProcessInfo.processInfo.processIdentifier {
+            guard let settingsWindow, settingsWindow.isVisible, !settingsWindow.isMiniaturized else { return false }
+            settingsWindow.miniaturize(nil)
+            return true
+        }
+        return tracker?.minimizeFocusedWindow(of: pid) ?? false
     }
 }
 

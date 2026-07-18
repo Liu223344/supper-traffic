@@ -507,6 +507,17 @@ final class WindowOverlay {
         presentationState = .hidden
     }
 
+    @discardableResult
+    func minimizeWindow() -> Bool {
+        guard !isSuppressed,
+              !isMinimizeDismissalInProgress,
+              let button = targetButtons[.minimize]
+                ?? copyAttribute(kAXMinimizeButtonAttribute as CFString, from: window),
+              copyAttribute(kAXEnabledAttribute as CFString, from: button) ?? true else { return false }
+        performMinimize(using: button)
+        return true
+    }
+
     private func hidePanels() {
         hoverResetWorkItem?.cancel()
         hoverResetWorkItem = nil

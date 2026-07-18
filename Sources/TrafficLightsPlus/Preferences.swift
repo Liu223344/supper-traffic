@@ -40,6 +40,7 @@ final class Preferences: ObservableObject {
         static let hiddenTrafficLightsEnabled = "hiddenTrafficLightsEnabled"
         static let hiddenTrafficLightRevealMode = "hiddenTrafficLightRevealMode"
         static let showInFullScreen = "showInFullScreen"
+        static let dockClickMinimizesActiveWindow = "dockClickMinimizesActiveWindow"
         static let closeBehavior = "closeButtonBehavior"
         static let minimizeBehavior = "minimizeButtonBehavior"
         static let zoomBehavior = "zoomButtonBehavior"
@@ -74,6 +75,10 @@ final class Preferences: ObservableObject {
 
     @Published private(set) var showInFullScreen: Bool
 
+    @Published var dockClickMinimizesActiveWindow: Bool {
+        didSet { defaults.set(dockClickMinimizesActiveWindow, forKey: Key.dockClickMinimizesActiveWindow) }
+    }
+
     @Published var closeBehavior: ButtonBehavior {
         didSet { defaults.set(closeBehavior.rawValue, forKey: Key.closeBehavior) }
     }
@@ -103,6 +108,7 @@ final class Preferences: ObservableObject {
             Key.hiddenTrafficLightsEnabled: true,
             Key.hiddenTrafficLightRevealMode: HiddenTrafficLightRevealMode.nearest.rawValue,
             Key.showInFullScreen: false,
+            Key.dockClickMinimizesActiveWindow: true,
             Key.closeBehavior: ButtonBehavior.closeWindow.rawValue,
             Key.minimizeBehavior: ButtonBehavior.minimizeWindow.rawValue,
             Key.zoomBehavior: ButtonBehavior.zoomWindow.rawValue
@@ -120,6 +126,7 @@ final class Preferences: ObservableObject {
         ) ?? .nearest
         showInFullScreen = false
         defaults.set(false, forKey: Key.showInFullScreen)
+        dockClickMinimizesActiveWindow = defaults.bool(forKey: Key.dockClickMinimizesActiveWindow)
         closeBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.closeBehavior) ?? "") ?? .closeWindow
         minimizeBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.minimizeBehavior) ?? "") ?? .minimizeWindow
         zoomBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.zoomBehavior) ?? "") ?? .zoomWindow

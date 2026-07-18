@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added an option to minimize the active window when its already-frontmost application's Dock icon is clicked again.
+- Fixed overlay suppression recovery when Stage Manager omits the window deminiaturized accessibility notification.
+
 ## 1.2.0 - 2026-07-17
 
 - Added native Intel (`x86_64`) builds while retaining Apple Silicon (`arm64`) support.
