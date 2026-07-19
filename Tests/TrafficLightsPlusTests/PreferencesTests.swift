@@ -239,6 +239,12 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
 
         defaults.set(-20, forKey: "controlSize")
         #expect(Preferences(defaults: defaults).size == 18)
+
+        defaults.set(Double.nan, forKey: "controlSize")
+        #expect(Preferences(defaults: defaults).size == ControlLayout.defaultSize)
+
+        defaults.set(Double.infinity, forKey: "controlSize")
+        #expect(Preferences(defaults: defaults).size == ControlLayout.defaultSize)
     }
 }
 
@@ -249,5 +255,11 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
 
         defaults.set(-500, forKey: "controlSpacingAdjustment")
         #expect(Preferences(defaults: defaults).spacing == -8)
+
+        defaults.set(Double.nan, forKey: "controlSpacingAdjustment")
+        #expect(Preferences(defaults: defaults).spacing == ControlLayout.defaultSpacingAdjustment)
+
+        defaults.set(-Double.infinity, forKey: "controlSpacingAdjustment")
+        #expect(Preferences(defaults: defaults).spacing == ControlLayout.defaultSpacingAdjustment)
     }
 }

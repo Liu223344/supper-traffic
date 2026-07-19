@@ -2,16 +2,20 @@ import CoreGraphics
 import Foundation
 
 struct ControlLayout {
+    static let defaultSize = 28.0
+    static let defaultSpacingAdjustment = 0.0
     static let sizeRange = 18.0...48.0
     static let spacingAdjustmentRange = -8.0...32.0
     static let activationPadding: CGFloat = 6
 
     static func effectiveSize(preferred: Double) -> CGFloat {
-        CGFloat(min(max(preferred, sizeRange.lowerBound), sizeRange.upperBound))
+        guard preferred.isFinite else { return CGFloat(defaultSize) }
+        return CGFloat(min(max(preferred, sizeRange.lowerBound), sizeRange.upperBound))
     }
 
     static func effectiveSpacingAdjustment(preferred: Double) -> CGFloat {
-        CGFloat(min(
+        guard preferred.isFinite else { return CGFloat(defaultSpacingAdjustment) }
+        return CGFloat(min(
             max(preferred, spacingAdjustmentRange.lowerBound),
             spacingAdjustmentRange.upperBound
         ))

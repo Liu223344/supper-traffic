@@ -113,8 +113,8 @@ final class Preferences: ObservableObject {
         let initialLanguage = storedLanguageValue.flatMap(AppLanguage.init(rawValue:)) ?? systemLanguage
         defaults.register(defaults: [
             Key.enabled: true,
-            Key.size: 28.0,
-            Key.spacing: 0.0,
+            Key.size: ControlLayout.defaultSize,
+            Key.spacing: ControlLayout.defaultSpacingAdjustment,
             Key.style: ControlStyle.macOS.rawValue,
             Key.hiddenTrafficLightsEnabled: true,
             Key.hiddenTrafficLightRevealMode: HiddenTrafficLightRevealMode.nearest.rawValue,
@@ -129,11 +129,8 @@ final class Preferences: ObservableObject {
             defaults.set(initialLanguage.rawValue, forKey: Key.language)
         }
         enabled = defaults.bool(forKey: Key.enabled)
-        size = min(max(defaults.double(forKey: Key.size), ControlLayout.sizeRange.lowerBound), ControlLayout.sizeRange.upperBound)
-        spacing = min(
-            max(defaults.double(forKey: Key.spacing), ControlLayout.spacingAdjustmentRange.lowerBound),
-            ControlLayout.spacingAdjustmentRange.upperBound
-        )
+        size = Double(ControlLayout.effectiveSize(preferred: defaults.double(forKey: Key.size)))
+        spacing = Double(ControlLayout.effectiveSpacingAdjustment(preferred: defaults.double(forKey: Key.spacing)))
         style = ControlStyle(rawValue: defaults.string(forKey: Key.style) ?? "") ?? .macOS
         hiddenTrafficLightsEnabled = defaults.bool(forKey: Key.hiddenTrafficLightsEnabled)
         hiddenTrafficLightRevealMode = HiddenTrafficLightRevealMode(

@@ -97,6 +97,17 @@ final class DockClickController {
         return nil
     }
 
+    static func summarizedWindowState(
+        minimizedStates: [Bool],
+        hasOnScreenWindow: Bool
+    ) -> (hasVisibleWindow: Bool, hasMinimizedWindow: Bool) {
+        let hasUnminimizedWindow = minimizedStates.contains(false)
+        return (
+            hasVisibleWindow: hasOnScreenWindow && hasUnminimizedWindow,
+            hasMinimizedWindow: minimizedStates.contains(true)
+        )
+    }
+
     fileprivate func handleEvent(type: CGEventType, event: CGEvent) -> Bool {
         let featureEnabled = preferences.dockClickMinimizesActiveWindow
         guard featureEnabled else {
@@ -235,13 +246,14 @@ final class DockClickController {
         let windows: [AXUIElement] = copyAttribute(kAXWindowsAttribute as CFString, from: application) ?? []
         let focusedWindow: AXUIElement? = copyAttribute(kAXFocusedWindowAttribute as CFString, from: application)
         let mainWindow: AXUIElement? = copyAttribute(kAXMainWindowAttribute as CFString, from: application)
-        let hasActiveUnminimizedWindow = [focusedWindow, mainWindow].compactMap { $0 }.contains {
-            !(copyAttribute(kAXMinimizedAttribute as CFString, from: $0) ?? false)
-        }
-        let hasMinimizedWindow = windows.contains {
+        let candidateWindows = [focusedWindow, mainWindow].compactMap { $0 } + windows
+        let minimizedStates = candidateWindows.map {
             copyAttribute(kAXMinimizedAttribute as CFString, from: $0) ?? false
         }
-        return (hasActiveUnminimizedWindow && hasOnScreenWindow(pid: pid), hasMinimizedWindow)
+        return Self.summarizedWindowState(
+            minimizedStates: minimizedStates,
+            hasOnScreenWindow: hasOnScreenWindow(pid: pid)
+        )
     }
 
     private func stageManagerIsEnabled() -> Bool {

@@ -76,6 +76,35 @@ import Testing
     ))
 }
 
+@Test func dockWindowStateUsesAnyUnminimizedAXWindowWhenFocusAttributesAreUnavailable() {
+    let visible = DockClickController.summarizedWindowState(
+        minimizedStates: [false],
+        hasOnScreenWindow: true
+    )
+    #expect(visible.hasVisibleWindow)
+    #expect(!visible.hasMinimizedWindow)
+
+    let mixed = DockClickController.summarizedWindowState(
+        minimizedStates: [true, false],
+        hasOnScreenWindow: true
+    )
+    #expect(mixed.hasVisibleWindow)
+    #expect(mixed.hasMinimizedWindow)
+
+    let minimized = DockClickController.summarizedWindowState(
+        minimizedStates: [true],
+        hasOnScreenWindow: true
+    )
+    #expect(!minimized.hasVisibleWindow)
+    #expect(minimized.hasMinimizedWindow)
+
+    let offScreen = DockClickController.summarizedWindowState(
+        minimizedStates: [false],
+        hasOnScreenWindow: false
+    )
+    #expect(!offScreen.hasVisibleWindow)
+}
+
 @Test func dockMinimizeNeverUsesStaleOverlaysWhenTrafficLightsAreDisabled() {
     #expect(WindowTracker.shouldUseOverlayMinimize(
         overlaysEnabled: true,

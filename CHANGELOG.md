@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed repeated Dock clicks being ignored when an application temporarily omits its focused or main Accessibility window.
+- Recovered safely from non-finite button size or spacing values in damaged preferences.
+
 ## 1.3.0 - 2026-07-18
 
 - Added an in-app Simplified Chinese and English language selector with immediate interface updates.

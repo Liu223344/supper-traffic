@@ -157,7 +157,7 @@ struct SettingsView: View {
                     Text("\(Int(preferences.size)) pt")
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
-                    Button(localized(.restoreDefault)) { preferences.size = 28 }
+                    Button(localized(.restoreDefault)) { preferences.size = ControlLayout.defaultSize }
                         .buttonStyle(.link)
                 }
                 HStack(spacing: 10) {
@@ -182,7 +182,9 @@ struct SettingsView: View {
                         Text(spacingDescription)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
-                        Button(localized(.restoreSystemSpacing)) { preferences.spacing = 0 }
+                        Button(localized(.restoreSystemSpacing)) {
+                            preferences.spacing = ControlLayout.defaultSpacingAdjustment
+                        }
                             .buttonStyle(.link)
                     }
                     HStack(spacing: 10) {
