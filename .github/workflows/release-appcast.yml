@@ -3,6 +3,12 @@ name: Publish Sparkle Appcasts
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag whose assets should be published
+        required: true
+        type: string
 
 concurrency:
   group: github-pages
@@ -10,7 +16,9 @@ concurrency:
 
 jobs:
   appcast:
-    if: github.event.release.draft == false && github.event.release.prerelease == false
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.release.draft == false && github.event.release.prerelease == false)
     runs-on: macos-15
     permissions:
       contents: read
@@ -18,11 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
 
       - name: Validate release metadata
         env:
-          RELEASE_TAG_INPUT: ${{ github.event.release.tag_name }}
+          RELEASE_TAG_INPUT: ${{ github.event.release.tag_name || inputs.release_tag }}
         shell: zsh {0}
         run: |
           set -euo pipefail
@@ -66,9 +74,9 @@ jobs:
           for arch in arm64 x86_64; do
             previous=$(mktemp)
             url="https://liu223344.github.io/traffic-light-plus/appcast-$arch.xml"
-            status=$(curl --silent --show-error --location \
+            http_status=$(curl --silent --show-error --location \
               --write-out '%{http_code}' --output "$previous" "$url")
-            case "$status" in
+            case "$http_status" in
               200)
                 previous_build=$(xmllint --xpath \
                   'string((//*[local-name()="item"]/*[local-name()="version"])[1])' \
@@ -80,7 +88,7 @@ jobs:
                 [[ "$VERSION" == "1.4.0" && "$BUILD_NUMBER" == "5" ]]
                 ;;
               *)
-                print -u2 -- "Unable to validate previous $arch appcast (HTTP $status)"
+                print -u2 -- "Unable to validate previous $arch appcast (HTTP $http_status)"
                 exit 1
                 ;;
             esac
@@ -99,8 +107,8 @@ jobs:
           release_body="$RUNNER_TEMP/release-notes.md"
           print -rn -- "$SPARKLE_EDDSA_PRIVATE_KEY" > "$key"
           chmod 600 "$key"
-          gh api "repos/$GITHUB_REPOSITORY/releases/${{ github.event.release.id }}" \
-            --jq '.body // ""' > "$release_body"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json body --jq '.body // ""' > "$release_body"
           mkdir -p pages
           touch pages/.nojekyll
 
